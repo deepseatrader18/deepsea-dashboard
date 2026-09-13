@@ -11,10 +11,11 @@
     --void:#050a12;
     --void-deep:#02060b;
     --panel:#0a1626;
-    --panel-edge:rgba(47,230,255,0.28);
+    --panel-edge:rgba(47,230,255,0.22);
     --cyan:#2fe6ff;
     --cyan-dim:rgba(47,230,255,0.45);
     --teal:#17e8b0;
+    --gold:#e0b64a;
     --amber:#ffb020;
     --danger:#ff4d5e;
     --text-hi:#e6f4fb;
@@ -25,36 +26,51 @@
   html,body{height:100%;}
   body{
     background:
-      radial-gradient(ellipse at 30% 20%, rgba(23,60,90,0.35), transparent 55%),
-      radial-gradient(ellipse at 80% 80%, rgba(23,232,176,0.06), transparent 50%),
+      radial-gradient(ellipse at 20% 10%, rgba(23,60,90,0.35), transparent 55%),
+      radial-gradient(ellipse at 85% 90%, rgba(23,232,176,0.05), transparent 50%),
       var(--void-deep);
     color:var(--text-hi);
     font-family:'Inter', sans-serif;
     overflow:hidden;
     height:100vh;
-    position:relative;
   }
   .mono{font-family:'JetBrains Mono', monospace;}
   .head-font{font-family:'Space Grotesk', sans-serif;}
+
   #dashboard{
     display:grid;
     height:100vh;
-    max-height:100vh;
-    grid-template-columns: 240px 1fr 300px;
-    grid-template-rows: 56px 1fr 110px;
+    grid-template-columns: 84px 280px 1fr 300px;
+    grid-template-rows: 62px 1fr 100px;
     grid-template-areas:
-      "topbar topbar topbar"
-      "left   center right"
-      "left   feed   right";
-    overflow:hidden;
+      "sidebar topbar  topbar topbar"
+      "sidebar network chart  right"
+      "sidebar feed    feed   right";
   }
-  #dashboard.active{display:grid;}
-  #world-map{
-    position:absolute;
-    top:56px; left:240px; right:300px; bottom:110px;
-    opacity:0.05;
-    pointer-events:none;
+
+  #sidebar{
+    grid-area:sidebar;
+    background:rgba(6,12,22,0.8);
+    border-right:1px solid rgba(47,230,255,0.12);
+    display:flex; flex-direction:column; align-items:center;
+    padding:18px 0;
+    gap:6px;
   }
+  .side-item{
+    width:100%;
+    display:flex; flex-direction:column; align-items:center; gap:4px;
+    padding:10px 0;
+    color:var(--text-dim);
+    cursor:pointer;
+    border-left:2px solid transparent;
+    transition:color .2s ease, background .2s ease;
+  }
+  .side-item svg{width:19px; height:19px;}
+  .side-item span{font-size:9.5px; font-family:'Space Grotesk'; letter-spacing:0.5px;}
+  .side-item:hover{color:var(--text-hi);}
+  .side-item.active{color:var(--cyan); border-left-color:var(--cyan); background:rgba(47,230,255,0.06);}
+  .side-gap{flex:1;}
+
   #topbar{
     grid-area:topbar;
     display:flex; align-items:center; justify-content:space-between;
@@ -62,75 +78,93 @@
     border-bottom:1px solid rgba(47,230,255,0.15);
     background:rgba(6,14,24,0.6);
   }
-  .brand{display:flex; align-items:center; gap:12px;}
-  .brand .dot{
-    width:7px; height:7px; border-radius:50%;
-    background:var(--teal); box-shadow:0 0 10px 2px var(--teal);
-  }
-  .brand-name{font-family:'Space Grotesk'; font-weight:700; letter-spacing:3px; font-size:15px;}
-  .brand-name span{color:var(--cyan);}
-  #topbar .status-cluster{display:flex; gap:22px;}
+  .brand{display:flex; align-items:center; gap:10px;}
+  .brand-icon{width:26px; height:26px; color:var(--cyan);}
+  .brand-text .name{font-family:'Space Grotesk'; font-weight:700; letter-spacing:3px; font-size:15px; line-height:1;}
+  .brand-text .name span{color:var(--cyan);}
+  .brand-text .tagline{font-size:8.5px; color:var(--text-dim); letter-spacing:2px; margin-top:2px;}
+  #topbar .status-cluster{display:flex; gap:20px;}
   .status-chip{
-    display:flex; align-items:center; gap:7px;
-    font-size:11px; color:var(--text-mid); letter-spacing:1px;
+    display:flex; align-items:center; gap:6px;
+    font-size:10.5px; color:var(--text-mid); letter-spacing:0.5px;
   }
   .status-chip .led{width:6px; height:6px; border-radius:50%; background:var(--text-dim);}
   .status-chip.on .led{background:var(--teal); box-shadow:0 0 8px 1px var(--teal);}
   .status-chip.warn .led{background:var(--amber); box-shadow:0 0 8px 1px var(--amber);}
-  #clock{font-family:'JetBrains Mono'; font-size:12.5px; color:var(--text-mid);}
+  .top-right{display:flex; align-items:center; gap:16px;}
+  #clock{font-family:'JetBrains Mono'; font-size:12px; color:var(--text-mid);}
+  #logout-link{
+    font-family:'Space Grotesk'; font-size:10.5px; letter-spacing:1px; color:var(--text-dim);
+    text-decoration:none; border:1px solid rgba(143,168,189,0.25); padding:5px 10px;
+  }
+
   .panel{
     background:rgba(9,18,30,0.55);
     border:1px solid rgba(47,230,255,0.14);
-    position:relative;
-    padding:16px 16px 14px;
-    display:flex; flex-direction:column;
+    padding:14px 14px 12px;
   }
   .panel-title{
-    font-family:'Space Grotesk'; font-size:11px; letter-spacing:2px;
-    color:var(--text-mid); margin-bottom:14px; display:flex; justify-content:space-between;
+    font-family:'Space Grotesk'; font-size:10.5px; letter-spacing:2px;
+    color:var(--text-mid); margin-bottom:10px; display:flex; align-items:center; gap:8px;
   }
-  .panel-title .tag{color:var(--cyan-dim); font-size:10px;}
-  #left-col{
-    grid-area:left;
+  .panel-title .led{width:6px; height:6px; border-radius:50%; background:var(--teal); box-shadow:0 0 6px 1px var(--teal);}
+
+  #network-col{
+    grid-area:network;
     border-right:1px solid rgba(47,230,255,0.12);
     padding:16px 14px;
     display:flex; flex-direction:column; gap:14px;
     overflow-y:auto;
   }
-  .gauge-panel{align-items:center;}
-  .gauge{position:relative; width:120px; height:120px; margin:4px auto 8px;}
-  .gauge svg{width:100%; height:100%; transform:rotate(-90deg);}
-  .gauge-track{fill:none; stroke:rgba(143,168,189,0.12); stroke-width:8;}
-  .gauge-fill{fill:none; stroke:var(--cyan); stroke-width:8; stroke-linecap:round; filter:drop-shadow(0 0 6px var(--cyan-dim));}
-  .gauge-value{
-    position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  #orbit-wrap{
+    position:relative;
+    width:100%;
+    height:250px;
+    flex-shrink:0;
   }
-  .gauge-value .num{font-family:'JetBrains Mono'; font-size:19px; font-weight:700;}
-  .gauge-value .lbl{font-size:9px; color:var(--text-dim); letter-spacing:1px; margin-top:2px;}
-  .stat-row{display:flex; justify-content:space-between; font-size:11.5px; padding:6px 0; border-top:1px solid rgba(143,168,189,0.08);}
+  .orbit-ring{
+    position:absolute; top:50%; left:50%;
+    border:1px solid rgba(47,230,255,0.12); border-radius:50%;
+    transform:translate(-50%,-50%);
+  }
+  .orbit-ring.r1{width:190px; height:190px; animation:spin 50s linear infinite;}
+  .orbit-ring.r2{width:230px; height:230px; border-style:dashed; animation:spin 80s linear infinite reverse;}
+  @keyframes spin{from{transform:translate(-50%,-50%) rotate(0deg);} to{transform:translate(-50%,-50%) rotate(360deg);}}
+  #core-logo{
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    width:64px; height:64px; border-radius:50%;
+    background:radial-gradient(circle, rgba(47,230,255,0.18), rgba(9,18,30,0.9));
+    border:1px solid var(--cyan);
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 0 24px rgba(47,230,255,0.25);
+  }
+  #core-logo svg{width:30px; height:30px; color:var(--cyan);}
+  .agent-node{
+    position:absolute; top:50%; left:50%;
+    display:flex; flex-direction:column; align-items:center; gap:3px;
+    width:64px;
+  }
+  .agent-node .bubble{
+    width:38px; height:38px; border-radius:50%;
+    background:rgba(9,18,30,0.9);
+    border:1px solid rgba(47,230,255,0.3);
+    display:flex; align-items:center; justify-content:center;
+    font-size:16px;
+  }
+  .agent-node .bubble .led{
+    position:absolute; width:7px; height:7px; border-radius:50%;
+    background:var(--teal); box-shadow:0 0 6px 1px var(--teal);
+    transform:translate(11px,-11px);
+  }
+  .agent-node .lbl{font-size:8.5px; color:var(--text-mid); text-align:center; line-height:1.2; font-family:'Space Grotesk';}
+
+  .stat-row{display:flex; justify-content:space-between; font-size:11px; padding:5px 0; border-top:1px solid rgba(143,168,189,0.08);}
   .stat-row .k{color:var(--text-dim);}
   .stat-row .v{font-family:'JetBrains Mono'; color:var(--text-hi);}
-  #center-col{
-    grid-area:center;
-    display:flex; flex-direction:column; align-items:center; justify-content:center;
-    position:relative;
-    overflow:hidden;
-  }
-  #globe-wrap{position:relative; width:260px; height:260px;}
-  #globe-canvas{width:100%; height:100%;}
-  .orbit-ring{
-    position:absolute; border:1px solid rgba(47,230,255,0.15); border-radius:50%;
-    top:50%; left:50%; transform:translate(-50%,-50%);
-  }
-  .orbit-ring.r1{width:310px; height:310px; animation:spin 40s linear infinite;}
-  .orbit-ring.r2{width:360px; height:360px; border-style:dashed; animation:spin 70s linear infinite reverse;}
-  @keyframes spin{from{transform:translate(-50%,-50%) rotate(0deg);} to{transform:translate(-50%,-50%) rotate(360deg);}}
-  #center-caption{margin-top:10px; text-align:center;}
-  #center-caption .title{font-family:'Space Grotesk'; letter-spacing:4px; font-size:13px; color:var(--text-mid);}
-  #center-caption .sub{font-family:'JetBrains Mono'; font-size:11px; color:var(--text-dim); margin-top:6px;}
+
+  #mic-panel{display:flex; align-items:center; gap:12px;}
   #mic-btn{
-    margin-top:14px;
-    width:56px; height:56px;
+    width:42px; height:42px; flex-shrink:0;
     border-radius:50%;
     border:1px solid var(--cyan);
     background:rgba(47,230,255,0.05);
@@ -139,149 +173,258 @@
     display:flex; align-items:center; justify-content:center;
     transition:background .2s ease, box-shadow .2s ease;
   }
-  #mic-btn svg{width:22px; height:22px;}
-  #mic-btn:hover{background:rgba(47,230,255,0.12);}
-  #mic-btn.idle-listening{
-    box-shadow:0 0 0 0 rgba(47,230,255,0.35);
-    animation:mic-idle-pulse 2.6s ease-out infinite;
-  }
+  #mic-btn svg{width:18px; height:18px;}
+  #mic-btn.idle-listening{ animation:mic-idle-pulse 2.6s ease-out infinite; }
   #mic-btn.listening{
-    background:var(--cyan);
-    color:#031014;
-    box-shadow:0 0 0 0 rgba(47,230,255,0.5);
+    background:var(--cyan); color:#031014;
     animation:mic-pulse 1.4s ease-out infinite;
   }
-  @keyframes mic-pulse{
-    0%{box-shadow:0 0 0 0 rgba(47,230,255,0.45);}
-    100%{box-shadow:0 0 0 22px rgba(47,230,255,0);}
+  @keyframes mic-pulse{0%{box-shadow:0 0 0 0 rgba(47,230,255,0.45);} 100%{box-shadow:0 0 0 16px rgba(47,230,255,0);}}
+  @keyframes mic-idle-pulse{0%{box-shadow:0 0 0 0 rgba(47,230,255,0.3);} 100%{box-shadow:0 0 0 10px rgba(47,230,255,0);}}
+  #mic-status{font-size:10.5px; color:var(--text-dim); font-family:'JetBrains Mono';}
+
+  #chart-col{
+    grid-area:chart;
+    padding:12px;
+    display:flex; flex-direction:column;
   }
-  @keyframes mic-idle-pulse{
-    0%{box-shadow:0 0 0 0 rgba(47,230,255,0.25);}
-    100%{box-shadow:0 0 0 12px rgba(47,230,255,0);}
-  }
-  #mic-status{
-    margin-top:8px; font-family:'JetBrains Mono'; font-size:11px; color:var(--text-dim); min-height:14px;
-  }
+  #chart-widget-wrap{flex:1; min-height:0;}
+
   #right-col{
     grid-area:right;
     border-left:1px solid rgba(47,230,255,0.12);
-    padding:16px 14px;
+    padding:14px;
     display:flex; flex-direction:column; gap:12px;
     overflow-y:auto;
   }
   .agent-row{
     display:flex; align-items:center; justify-content:space-between;
-    padding:10px 12px;
+    padding:8px 10px;
     background:rgba(255,255,255,0.015);
     border:1px solid rgba(143,168,189,0.1);
-    font-size:12px;
+    font-size:11.5px;
   }
-  .agent-row .name{display:flex; align-items:center; gap:8px;}
+  .agent-row .name{display:flex; align-items:center; gap:7px;}
   .agent-row .led{width:6px; height:6px; border-radius:50%; background:var(--text-dim);}
   .agent-row.online .led{background:var(--teal); box-shadow:0 0 6px 1px var(--teal);}
-  .agent-row .state{color:var(--text-dim); font-family:'JetBrains Mono'; font-size:10.5px;}
+  .agent-row .state{color:var(--text-dim); font-family:'JetBrains Mono'; font-size:10px;}
+  #market-widget-wrap{height:190px;}
+  #news-widget-wrap{flex:1; min-height:150px;}
+
   #feed-col{
     grid-area:feed;
     border-top:1px solid rgba(47,230,255,0.12);
-    padding:12px 20px;
+    padding:10px 18px;
     overflow-y:auto;
     display:flex; flex-direction:column-reverse;
   }
   .feed-line{
-    font-family:'JetBrains Mono'; font-size:11.5px; color:var(--text-mid);
-    padding:4px 0; display:flex; gap:12px;
+    font-family:'JetBrains Mono'; font-size:11px; color:var(--text-mid);
+    padding:3px 0; display:flex; gap:12px;
   }
   .feed-line .t{color:var(--text-dim);}
   .feed-line .src{color:var(--cyan-dim);}
+
   ::-webkit-scrollbar{width:5px;}
   ::-webkit-scrollbar-thumb{background:rgba(47,230,255,0.2);}
 </style>
 </head>
 <body>
 
-  <div id="dashboard" class="active">
+  <div id="dashboard">
+
+    <div id="sidebar">
+      <div class="side-item active">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12l9-9 9 9"/><path d="M5 10v10h14V10"/></svg>
+        <span>Dashboard</span>
+      </div>
+      <div class="side-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17l6-6 4 4 8-8"/><path d="M14 7h7v7"/></svg>
+        <span>Trading</span>
+      </div>
+      <div class="side-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="7" r="4"/><path d="M2 21v-2a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v2"/><circle cx="18" cy="8" r="3"/></svg>
+        <span>Agents</span>
+      </div>
+      <div class="side-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.6V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.6 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.6 1z"/></svg>
+        <span>Settings</span>
+      </div>
+      <div class="side-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
+        <span>Logs</span>
+      </div>
+      <div class="side-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a4 4 0 1 0-5.4 5.4l-6 6a1 1 0 0 0 1.4 1.4l6-6a4 4 0 0 0 5.4-5.4z"/></svg>
+        <span>Tools</span>
+      </div>
+      <div class="side-gap"></div>
+    </div>
 
     <div id="topbar">
       <div class="brand">
-        <span class="dot"></span>
-        <span class="brand-name">DEEP<span>SEA</span></span>
+        <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2v13"/><path d="M6 5c0 3 2 5 6 5s6-2 6-5"/><path d="M6 5l1 5h10l1-5"/><path d="M9 22l3-4 3 4"/></svg>
+        <div class="brand-text">
+          <div class="name">DEEP<span>SEA</span></div>
+          <div class="tagline">TRADE · ANALYZE · EXECUTE</div>
+        </div>
       </div>
       <div class="status-cluster">
         <div class="status-chip on"><span class="led"></span>MT5 BRIDGE</div>
         <div class="status-chip on"><span class="led"></span>TELEGRAM</div>
         <div class="status-chip warn"><span class="led"></span>AGENTS IDLE</div>
       </div>
-      <div style="display:flex; align-items:center; gap:18px;">
+      <div class="top-right">
         <div id="clock" class="mono">--:--:--</div>
-        <a href="/logout" style="font-family:'Space Grotesk'; font-size:11px; letter-spacing:1px; color:var(--text-dim); text-decoration:none; border:1px solid rgba(143,168,189,0.25); padding:5px 10px;">LOGOUT</a>
+        <a href="/logout" id="logout-link">LOGOUT</a>
       </div>
     </div>
 
-    <div id="left-col">
-      <div class="panel gauge-panel">
-        <div class="panel-title">EQUITY <span class="tag">LIVE</span></div>
-        <div class="gauge">
-          <svg viewBox="0 0 120 120">
-            <circle class="gauge-track" cx="60" cy="60" r="52"/>
-            <circle class="gauge-fill" cx="60" cy="60" r="52" stroke-dasharray="326" stroke-dashoffset="90"/>
-          </svg>
-          <div class="gauge-value"><span class="num">--</span><span class="lbl">USD</span></div>
-        </div>
-      </div>
-      <div class="panel">
-        <div class="panel-title">ACCOUNT</div>
-        <div class="stat-row"><span class="k">Balance</span><span class="v">--</span></div>
-        <div class="stat-row"><span class="k">Open P/L</span><span class="v">--</span></div>
-        <div class="stat-row"><span class="k">Margin</span><span class="v">--</span></div>
-        <div class="stat-row"><span class="k">Positions</span><span class="v">--</span></div>
-      </div>
-      <div class="panel" style="padding:8px;">
-        <div class="panel-title" style="margin-bottom:8px; padding:0 8px;">XAUUSD <span class="tag">LIVE CHART</span></div>
-        <iframe
-          src="https://s.tradingview.com/widgetembed/?symbol=OANDA%3AXAUUSD&interval=15&hidesidetoolbar=1&hidetoptoolbar=0&symboledit=0&saveimage=0&toolbarbg=0a1626&studies=%5B%5D&theme=dark&style=1&timezone=Etc%2FUTC"
-          style="width:100%; height:260px; border:0;"
-          allowtransparency="true">
-        </iframe>
-      </div>
-    </div>
-
-    <svg id="world-map" viewBox="0 0 1000 500" preserveAspectRatio="xMidYMid slice">
-      <path fill="none" stroke="#2fe6ff" stroke-width="1"
-        d="M120,220 Q200,180 260,220 T420,210 T600,230 T800,200 T950,230 M100,300 Q300,340 500,300 T900,320"/>
-      <circle cx="220" cy="230" r="2" fill="#2fe6ff"/>
-      <circle cx="520" cy="215" r="2" fill="#2fe6ff"/>
-      <circle cx="780" cy="205" r="2" fill="#2fe6ff"/>
-    </svg>
-
-    <div id="center-col">
-      <div id="globe-wrap">
+    <div id="network-col">
+      <div id="orbit-wrap">
         <div class="orbit-ring r1"></div>
         <div class="orbit-ring r2"></div>
-        <canvas id="globe-canvas" width="340" height="340"></canvas>
+        <div id="core-logo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2v13"/><path d="M6 5c0 3 2 5 6 5s6-2 6-5"/><path d="M6 5l1 5h10l1-5"/><path d="M9 22l3-4 3 4"/></svg>
+        </div>
+        <div class="agent-node" style="transform:translate(calc(-50% + 0px), calc(-50% + -108px));">
+          <div class="bubble">🧠<span class="led"></span></div>
+          <div class="lbl">DeepSea<br>Core</div>
+        </div>
+        <div class="agent-node" style="transform:translate(calc(-50% + 94px), calc(-50% + -54px));">
+          <div class="bubble">✉️<span class="led"></span></div>
+          <div class="lbl">Mercury<br>Gmail</div>
+        </div>
+        <div class="agent-node" style="transform:translate(calc(-50% + 94px), calc(-50% + 54px));">
+          <div class="bubble">💬<span class="led"></span></div>
+          <div class="lbl">Venus<br>WhatsApp</div>
+        </div>
+        <div class="agent-node" style="transform:translate(calc(-50% + 0px), calc(-50% + 108px));">
+          <div class="bubble">📷<span class="led"></span></div>
+          <div class="lbl">Mars<br>Instagram</div>
+        </div>
+        <div class="agent-node" style="transform:translate(calc(-50% + -94px), calc(-50% + 54px));">
+          <div class="bubble">▶️<span class="led"></span></div>
+          <div class="lbl">Jupiter<br>YouTube</div>
+        </div>
+        <div class="agent-node" style="transform:translate(calc(-50% + -94px), calc(-50% + -54px));">
+          <div class="bubble">📊<span class="led"></span></div>
+          <div class="lbl">MT5<br>Bridge</div>
+        </div>
       </div>
-      <div id="center-caption">
-        <div class="title">COMMAND CENTER</div>
-        <div class="sub" id="uptime-line">STANDBY — AWAITING MODULES</div>
+
+      <div class="panel">
+        <div class="panel-title"><span class="led"></span>ACCOUNT</div>
+        <div class="stat-row"><span class="k">Balance</span><span class="v">--</span></div>
+        <div class="stat-row"><span class="k">Equity</span><span class="v">--</span></div>
+        <div class="stat-row"><span class="k">Open P/L</span><span class="v">--</span></div>
+        <div class="stat-row"><span class="k">Positions</span><span class="v">--</span></div>
       </div>
-      <button id="mic-btn" title="Talk to DeepSea">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-          <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-          <line x1="12" y1="19" x2="12" y2="23"/>
-          <line x1="8" y1="23" x2="16" y2="23"/>
-        </svg>
-      </button>
-      <div id="mic-status">Starting mic...</div>
+
+      <div class="panel" id="mic-panel">
+        <button id="mic-btn" title="Talk to DeepSea">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+            <line x1="12" y1="19" x2="12" y2="23"/>
+            <line x1="8" y1="23" x2="16" y2="23"/>
+          </svg>
+        </button>
+        <div id="mic-status">Starting mic...</div>
+      </div>
+    </div>
+
+    <div id="chart-col">
+      <div id="chart-widget-wrap">
+        <div class="tradingview-widget-container" style="height:100%;width:100%">
+          <div class="tradingview-widget-container__widget" style="height:100%;width:100%"></div>
+          <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js" async>
+          {
+            "autosize": true,
+            "symbol": "OANDA:XAUUSD",
+            "interval": "15",
+            "timezone": "Etc/UTC",
+            "theme": "dark",
+            "style": "1",
+            "locale": "en",
+            "toolbar_bg": "#0a1626",
+            "enable_publishing": false,
+            "hide_top_toolbar": false,
+            "hide_legend": false,
+            "allow_symbol_change": true,
+            "support_host": "https://www.tradingview.com"
+          }
+          </script>
+        </div>
+      </div>
     </div>
 
     <div id="right-col">
-      <div class="panel-title" style="padding-top:2px;">AGENTS</div>
-      <div class="agent-row"><div class="name"><span class="led"></span>DeepSea (core)</div><div class="state">STANDBY</div></div>
-      <div class="agent-row"><div class="name"><span class="led"></span>Mercury · Gmail</div><div class="state">PENDING</div></div>
-      <div class="agent-row"><div class="name"><span class="led"></span>Venus · WhatsApp</div><div class="state">PENDING</div></div>
-      <div class="agent-row"><div class="name"><span class="led"></span>Mars · Instagram</div><div class="state">PENDING</div></div>
-      <div class="agent-row"><div class="name"><span class="led"></span>Jupiter · YouTube</div><div class="state">PENDING</div></div>
-      <div class="agent-row online"><div class="name"><span class="led"></span>MT5 Bridge</div><div class="state">ONLINE</div></div>
+      <div class="panel">
+        <div class="panel-title"><span class="led"></span>AGENTS</div>
+        <div class="agent-row online"><div class="name"><span class="led"></span>DeepSea (core)</div><div class="state">ONLINE</div></div>
+        <div class="agent-row online"><div class="name"><span class="led"></span>Mercury · Gmail</div><div class="state">ONLINE</div></div>
+        <div class="agent-row"><div class="name"><span class="led"></span>Venus · WhatsApp</div><div class="state">PENDING</div></div>
+        <div class="agent-row"><div class="name"><span class="led"></span>Mars · Instagram</div><div class="state">PENDING</div></div>
+        <div class="agent-row"><div class="name"><span class="led"></span>Jupiter · YouTube</div><div class="state">PENDING</div></div>
+        <div class="agent-row online"><div class="name"><span class="led"></span>MT5 Bridge</div><div class="state">ONLINE</div></div>
+      </div>
+
+      <div class="panel" style="flex-shrink:0;">
+        <div class="panel-title"><span class="led"></span>MARKET WATCH</div>
+        <div id="market-widget-wrap">
+          <div class="tradingview-widget-container" style="height:100%;width:100%">
+            <div class="tradingview-widget-container__widget" style="height:100%;width:100%"></div>
+            <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-market-overview.js" async>
+            {
+              "colorTheme": "dark",
+              "dateRange": "1D",
+              "showChart": false,
+              "locale": "en",
+              "width": "100%",
+              "height": "100%",
+              "isTransparent": true,
+              "showSymbolLogo": true,
+              "showFloatingTooltip": false,
+              "plotLineColorGrowing": "rgba(47,230,255,1)",
+              "plotLineColorFalling": "rgba(255,77,94,1)",
+              "tabs": [
+                {
+                  "title": "Watchlist",
+                  "symbols": [
+                    { "s": "OANDA:XAUUSD", "d": "Gold" },
+                    { "s": "COINBASE:BTCUSD", "d": "Bitcoin" },
+                    { "s": "FX:EURUSD", "d": "EUR/USD" },
+                    { "s": "FX:GBPUSD", "d": "GBP/USD" }
+                  ]
+                }
+              ]
+            }
+            </script>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel" style="flex:1; min-height:0; display:flex; flex-direction:column;">
+        <div class="panel-title"><span class="led"></span>LATEST NEWS</div>
+        <div id="news-widget-wrap">
+          <div class="tradingview-widget-container" style="height:100%;width:100%">
+            <div class="tradingview-widget-container__widget" style="height:100%;width:100%"></div>
+            <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-timeline.js" async>
+            {
+              "feedMode": "market",
+              "market": "forex",
+              "isTransparent": true,
+              "displayMode": "compact",
+              "width": "100%",
+              "height": "100%",
+              "colorTheme": "dark",
+              "locale": "en"
+            }
+            </script>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div id="feed-col" class="mono">
@@ -312,54 +455,13 @@
   startClock();
   logLine('SYSTEM', 'Access granted. Welcome back.');
 
-  const canvas = document.getElementById('globe-canvas');
-  const ctx = canvas.getContext('2d');
-  const W = canvas.width, H = canvas.height;
-  const R = 130;
-  const particles = [];
-  const N = 260;
-
-  for(let i=0;i<N;i++){
-    const theta = Math.acos(2*Math.random()-1);
-    const phi = Math.random()*2*Math.PI;
-    particles.push({theta, phi, speed: 0.002 + Math.random()*0.001});
-  }
-
-  function draw(){
-    ctx.clearRect(0,0,W,H);
-    const cx = W/2, cy = H/2;
-    const pts = particles.map(p=>{
-      p.phi += p.speed;
-      const x = R*Math.sin(p.theta)*Math.cos(p.phi);
-      const y = R*Math.cos(p.theta);
-      const z = R*Math.sin(p.theta)*Math.sin(p.phi);
-      return {x,y,z};
+  document.querySelectorAll('.side-item').forEach(item => {
+    item.addEventListener('click', () => {
+      document.querySelectorAll('.side-item').forEach(i => i.classList.remove('active'));
+      item.classList.add('active');
     });
-    pts.sort((a,b)=>a.z-b.z);
-    for(const p of pts){
-      const scale = (p.z+R)/(2*R);
-      const px = cx + p.x;
-      const py = cy + p.y;
-      const size = 0.6 + scale*1.8;
-      const alpha = 0.15 + scale*0.7;
-      ctx.beginPath();
-      ctx.arc(px, py, size, 0, Math.PI*2);
-      ctx.fillStyle = `rgba(47,230,255,${alpha})`;
-      ctx.fill();
-    }
-    const grad = ctx.createRadialGradient(cx,cy,10,cx,cy,R*0.9);
-    grad.addColorStop(0, 'rgba(23,232,176,0.10)');
-    grad.addColorStop(1, 'rgba(23,232,176,0)');
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.arc(cx,cy,R*0.9,0,Math.PI*2);
-    ctx.fill();
+  });
 
-    requestAnimationFrame(draw);
-  }
-  draw();
-
-  // ---- VOICE ASSISTANT (free, browser-based, always listening for "DeepSea") ----
   const micBtn = document.getElementById('mic-btn');
   const micStatus = document.getElementById('mic-status');
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -473,7 +575,6 @@
       micStatus.textContent = 'Boliye...';
     });
 
-    // Ask for mic permission and start listening as soon as the page loads.
     startListening();
   }
 </script>
