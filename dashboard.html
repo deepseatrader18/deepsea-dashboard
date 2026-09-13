@@ -347,6 +347,7 @@
 
   function speak(text){
     const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = 'hi-IN';
     utter.rate = 1;
     utter.pitch = 1;
     window.speechSynthesis.speak(utter);
@@ -357,7 +358,7 @@
     micBtn.disabled = true;
   } else {
     const recognition = new SpeechRecognition();
-    recognition.lang = 'en-IN';
+    recognition.lang = 'hi-IN';
     recognition.continuous = false;
     recognition.interimResults = false;
 
