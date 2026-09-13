@@ -4,6 +4,7 @@ const path = require('path');
 const app = express();
 
 app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
 
 app.use(session({
   secret: process.env.SESSION_SECRET || 'deepsea-fallback-secret-change-me',
@@ -13,6 +14,7 @@ app.use(session({
 }));
 
 const MASTER_PASSWORD = process.env.MASTER_PASSWORD;
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 function requireAuth(req, res, next) {
   if (req.session && req.session.authenticated) {
@@ -40,6 +42,56 @@ app.get('/logout', (req, res) => {
 
 app.get('/', requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, 'dashboard.html'));
+});
+
+// Voice assistant "brain" — sends the spoken text to Gemini and returns a reply.
+app.post('/api/chat', requireAuth, async (req, res) => {
+  const userText = (req.body && req.body.text) || '';
+  if (!userText.trim()) {
+    return res.status(400).json({ error: 'No text provided' });
+  }
+  if (!GEMINI_API_KEY) {
+    return res.status(500).json({ error: 'GEMINI_API_KEY not set on server' });
+  }
+
+  try {
+    const systemInstruction =
+      "You are DeepSea, a calm and confident AI assistant helping run a personal trading and automation system. " +
+      "Keep replies short (1-3 sentences), spoken-friendly, and to the point. Never use markdown formatting, asterisks, or bullet points, since your reply is read aloud.";
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: systemInstruction }] },
+          contents: [{ role: 'user', parts: [{ text: userText }] }]
+        })
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error('Gemini API error:', JSON.stringify(data));
+      return res.status(502).json({ error: 'Gemini API error' });
+    }
+
+    const reply =
+      (data.candidates &&
+        data.candidates[0] &&
+        data.candidates[0].content &&
+        data.candidates[0].content.parts &&
+        data.candidates[0].content.parts[0] &&
+        data.candidates[0].content.parts[0].text) ||
+      "Sorry, I didn't catch that.";
+
+    res.json({ reply });
+  } catch (err) {
+    console.error('Chat error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
 const PORT = process.env.PORT || 3000;
