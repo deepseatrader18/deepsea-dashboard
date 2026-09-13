@@ -355,7 +355,7 @@
   const micBtn = document.getElementById('mic-btn');
   const micStatus = document.getElementById('mic-status');
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  const WAKE_WORDS = ['deepsea', 'deep sea', 'डीपसी', 'डीप सी', 'दीपसी', 'दीप सी', 'दीप सि', 'डीप सि', 'dipsi', 'dipsy', 'deepsi', 'deep si'];
+  const WAKE_WORDS = ['deepsea', 'deep sea', 'deep see', 'deepsee', 'deep si', 'deepsi', 'dipsi', 'dipsy', 'dip see', 'dip sea', 'डीपसी', 'डीप सी', 'दीपसी', 'दीप सी'];
 
   let isSpeaking = false;
   let shouldBeListening = true;
@@ -374,15 +374,9 @@
     window.speechSynthesis.speak(utter);
   }
 
-  function findWakeWord(text){
+  function hasWakeWord(text){
     const lower = text.toLowerCase();
-    for (const w of WAKE_WORDS) {
-      const idx = lower.indexOf(w.toLowerCase());
-      if (idx !== -1) {
-        return text.slice(idx + w.length).trim();
-      }
-    }
-    return null;
+    return WAKE_WORDS.some(w => lower.includes(w.toLowerCase()));
   }
 
   async function sendToDeepSea(command){
@@ -422,7 +416,7 @@
     micBtn.disabled = true;
   } else {
     recognition = new SpeechRecognition();
-    recognition.lang = 'hi-IN';
+    recognition.lang = 'en-IN';
     recognition.continuous = true;
     recognition.interimResults = false;
 
@@ -448,27 +442,26 @@
       const last = event.results[event.results.length - 1];
       if (!last.isFinal) return;
       const spokenText = last[0].transcript;
+      logLine('HEARD', spokenText);
 
       if (awaitingCommand) {
         awaitingCommand = false;
+        recognition.lang = 'en-IN';
         sendToDeepSea(spokenText);
         return;
       }
 
-      const afterWake = findWakeWord(spokenText);
-      if (afterWake !== null) {
-        if (afterWake.length > 2) {
-          sendToDeepSea(afterWake);
-        } else {
-          awaitingCommand = true;
-          micStatus.textContent = 'Ji, boliye...';
-          speak('जी, बोलिए');
-        }
+      if (hasWakeWord(spokenText)) {
+        awaitingCommand = true;
+        recognition.lang = 'hi-IN';
+        micStatus.textContent = 'Ji, boliye...';
+        speak('जी, बोलिए');
       }
     };
 
     micBtn.addEventListener('click', () => {
       awaitingCommand = true;
+      recognition.lang = 'hi-IN';
       micStatus.textContent = 'Boliye...';
     });
 
