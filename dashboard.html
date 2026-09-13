@@ -34,10 +34,8 @@
     height:100vh;
     position:relative;
   }
-
   .mono{font-family:'JetBrains Mono', monospace;}
   .head-font{font-family:'Space Grotesk', sans-serif;}
-
   #dashboard{
     display:grid;
     height:100vh;
@@ -49,14 +47,12 @@
       "left   feed   right";
   }
   #dashboard.active{display:grid;}
-
   #world-map{
     position:absolute;
     top:62px; left:240px; right:300px; bottom:130px;
     opacity:0.05;
     pointer-events:none;
   }
-
   #topbar{
     grid-area:topbar;
     display:flex; align-items:center; justify-content:space-between;
@@ -80,7 +76,6 @@
   .status-chip.on .led{background:var(--teal); box-shadow:0 0 8px 1px var(--teal);}
   .status-chip.warn .led{background:var(--amber); box-shadow:0 0 8px 1px var(--amber);}
   #clock{font-family:'JetBrains Mono'; font-size:12.5px; color:var(--text-mid);}
-
   .panel{
     background:rgba(9,18,30,0.55);
     border:1px solid rgba(47,230,255,0.14);
@@ -93,7 +88,6 @@
     color:var(--text-mid); margin-bottom:14px; display:flex; justify-content:space-between;
   }
   .panel-title .tag{color:var(--cyan-dim); font-size:10px;}
-
   #left-col{
     grid-area:left;
     border-right:1px solid rgba(47,230,255,0.12);
@@ -114,7 +108,6 @@
   .stat-row{display:flex; justify-content:space-between; font-size:11.5px; padding:6px 0; border-top:1px solid rgba(143,168,189,0.08);}
   .stat-row .k{color:var(--text-dim);}
   .stat-row .v{font-family:'JetBrains Mono'; color:var(--text-hi);}
-
   #center-col{
     grid-area:center;
     display:flex; flex-direction:column; align-items:center; justify-content:center;
@@ -132,7 +125,32 @@
   #center-caption{margin-top:18px; text-align:center;}
   #center-caption .title{font-family:'Space Grotesk'; letter-spacing:4px; font-size:13px; color:var(--text-mid);}
   #center-caption .sub{font-family:'JetBrains Mono'; font-size:11px; color:var(--text-dim); margin-top:6px;}
-
+  #mic-btn{
+    margin-top:26px;
+    width:64px; height:64px;
+    border-radius:50%;
+    border:1px solid var(--cyan);
+    background:rgba(47,230,255,0.05);
+    color:var(--cyan);
+    cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    transition:background .2s ease, box-shadow .2s ease;
+  }
+  #mic-btn svg{width:26px; height:26px;}
+  #mic-btn:hover{background:rgba(47,230,255,0.12);}
+  #mic-btn.listening{
+    background:var(--cyan);
+    color:#031014;
+    box-shadow:0 0 0 0 rgba(47,230,255,0.5);
+    animation:mic-pulse 1.4s ease-out infinite;
+  }
+  @keyframes mic-pulse{
+    0%{box-shadow:0 0 0 0 rgba(47,230,255,0.45);}
+    100%{box-shadow:0 0 0 22px rgba(47,230,255,0);}
+  }
+  #mic-status{
+    margin-top:12px; font-family:'JetBrains Mono'; font-size:11px; color:var(--text-dim); min-height:14px;
+  }
   #right-col{
     grid-area:right;
     border-left:1px solid rgba(47,230,255,0.12);
@@ -151,7 +169,6 @@
   .agent-row .led{width:6px; height:6px; border-radius:50%; background:var(--text-dim);}
   .agent-row.online .led{background:var(--teal); box-shadow:0 0 6px 1px var(--teal);}
   .agent-row .state{color:var(--text-dim); font-family:'JetBrains Mono'; font-size:10.5px;}
-
   #feed-col{
     grid-area:feed;
     border-top:1px solid rgba(47,230,255,0.12);
@@ -165,7 +182,6 @@
   }
   .feed-line .t{color:var(--text-dim);}
   .feed-line .src{color:var(--cyan-dim);}
-
   ::-webkit-scrollbar{width:5px;}
   ::-webkit-scrollbar-thumb{background:rgba(47,230,255,0.2);}
 </style>
@@ -228,6 +244,15 @@
         <div class="title">COMMAND CENTER</div>
         <div class="sub" id="uptime-line">STANDBY — AWAITING MODULES</div>
       </div>
+      <button id="mic-btn" title="Talk to DeepSea">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+          <line x1="12" y1="19" x2="12" y2="23"/>
+          <line x1="8" y1="23" x2="16" y2="23"/>
+        </svg>
+      </button>
+      <div id="mic-status">Tap to talk</div>
     </div>
 
     <div id="right-col">
@@ -314,6 +339,75 @@
     requestAnimationFrame(draw);
   }
   draw();
+
+  // ---- VOICE ASSISTANT (free, browser-based) ----
+  const micBtn = document.getElementById('mic-btn');
+  const micStatus = document.getElementById('mic-status');
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  function speak(text){
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.rate = 1;
+    utter.pitch = 1;
+    window.speechSynthesis.speak(utter);
+  }
+
+  if (!SpeechRecognition) {
+    micStatus.textContent = 'Voice not supported in this browser — use Chrome';
+    micBtn.disabled = true;
+  } else {
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'en-IN';
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
+    let listening = false;
+
+    micBtn.addEventListener('click', () => {
+      if (listening) return;
+      recognition.start();
+    });
+
+    recognition.onstart = () => {
+      listening = true;
+      micBtn.classList.add('listening');
+      micStatus.textContent = 'Listening...';
+    };
+
+    recognition.onend = () => {
+      listening = false;
+      micBtn.classList.remove('listening');
+    };
+
+    recognition.onerror = (e) => {
+      listening = false;
+      micBtn.classList.remove('listening');
+      micStatus.textContent = 'Mic error — tap to retry';
+      logLine('SYSTEM', `Voice error: ${e.error}`);
+    };
+
+    recognition.onresult = async (event) => {
+      const spokenText = event.results[0][0].transcript;
+      micStatus.textContent = 'Thinking...';
+      logLine('YOU', spokenText);
+
+      try {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: spokenText })
+        });
+        const data = await res.json();
+        const reply = data.reply || "Sorry, something went wrong.";
+        logLine('DEEPSEA', reply);
+        speak(reply);
+        micStatus.textContent = 'Tap to talk';
+      } catch (err) {
+        micStatus.textContent = 'Connection error — tap to retry';
+        logLine('SYSTEM', 'Could not reach DeepSea brain.');
+      }
+    };
+  }
 </script>
 </body>
 </html>
