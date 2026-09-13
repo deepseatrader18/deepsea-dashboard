@@ -1,6 +1,7 @@
 const express = require('express');
 const session = require('express-session');
 const path = require('path');
+const { ImapFlow } = require('imapflow');
 const app = express();
 
 app.use(express.urlencoded({ extended: true }));
@@ -17,6 +18,46 @@ const MASTER_PASSWORD = process.env.MASTER_PASSWORD;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const VPS_STATUS_URL = process.env.VPS_STATUS_URL;
 const VPS_STATUS_KEY = process.env.VPS_STATUS_KEY;
+const GMAIL_USER = process.env.GMAIL_USER;
+const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD;
+
+async function getGmailStatus() {
+  if (!GMAIL_USER || !GMAIL_APP_PASSWORD) return null;
+  const client = new ImapFlow({
+    host: 'imap.gmail.com',
+    port: 993,
+    secure: true,
+    auth: { user: GMAIL_USER, pass: GMAIL_APP_PASSWORD },
+    logger: false
+  });
+  try {
+    await client.connect();
+    const lock = await client.getMailboxLock('INBOX');
+    let unreadCount = 0;
+    let latest = null;
+    try {
+      const status = await client.status('INBOX', { unseen: true });
+      unreadCount = status.unseen || 0;
+
+      if (unreadCount > 0) {
+        for await (const msg of client.fetch({ seen: false }, { envelope: true })) {
+          latest = {
+            from: msg.envelope.from && msg.envelope.from[0] ? msg.envelope.from[0].name || msg.envelope.from[0].address : 'unknown',
+            subject: msg.envelope.subject || '(no subject)'
+          };
+        }
+      }
+    } finally {
+      lock.release();
+    }
+    await client.logout();
+    return { unreadCount, latest };
+  } catch (err) {
+    console.error('Gmail check failed:', err.message);
+    try { await client.logout(); } catch (e) {}
+    return null;
+  }
+}
 
 async function getMT5Status() {
   if (!VPS_STATUS_URL || !VPS_STATUS_KEY) return null;
@@ -73,10 +114,17 @@ app.post('/api/chat', requireAuth, async (req, res) => {
       ? `Current live MT5 account data — Balance: ${mt5Status.balance}, Equity: ${mt5Status.equity}, Open Trades: ${mt5Status.openTrades}.`
       : 'Live MT5 account data is not available right now.';
 
+    const gmailStatus = await getGmailStatus();
+    const gmailText = gmailStatus
+      ? (gmailStatus.unreadCount > 0
+          ? `Gmail inbox: ${gmailStatus.unreadCount} unread email(s). Most recent unread is from ${gmailStatus.latest.from}, subject: "${gmailStatus.latest.subject}".`
+          : 'Gmail inbox: no unread emails.')
+      : 'Gmail data is not available right now.';
+
     const systemInstruction =
       "You are DeepSea, a calm and confident AI assistant helping run a personal trading and automation system. " +
       "Always reply in Hindi (Devanagari script), even if the user speaks in English or Hinglish. " +
-      `${statusText} Use this real data to answer questions about balance, equity, or open trades accurately — never guess or make up numbers. ` +
+      `${statusText} ${gmailText} Use this real data to answer questions about balance, equity, open trades, or email accurately — never guess or make up numbers or email content. ` +
       "Keep replies short (1-3 sentences), spoken-friendly, and to the point. Never use markdown formatting, asterisks, or bullet points, since your reply is read aloud.";
 
     const response = await fetch(
