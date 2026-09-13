@@ -39,17 +39,19 @@
   #dashboard{
     display:grid;
     height:100vh;
+    max-height:100vh;
     grid-template-columns: 240px 1fr 300px;
-    grid-template-rows: 62px 1fr 130px;
+    grid-template-rows: 56px 1fr 110px;
     grid-template-areas:
       "topbar topbar topbar"
       "left   center right"
       "left   feed   right";
+    overflow:hidden;
   }
   #dashboard.active{display:grid;}
   #world-map{
     position:absolute;
-    top:62px; left:240px; right:300px; bottom:130px;
+    top:56px; left:240px; right:300px; bottom:110px;
     opacity:0.05;
     pointer-events:none;
   }
@@ -112,22 +114,23 @@
     grid-area:center;
     display:flex; flex-direction:column; align-items:center; justify-content:center;
     position:relative;
+    overflow:hidden;
   }
-  #globe-wrap{position:relative; width:340px; height:340px;}
+  #globe-wrap{position:relative; width:260px; height:260px;}
   #globe-canvas{width:100%; height:100%;}
   .orbit-ring{
     position:absolute; border:1px solid rgba(47,230,255,0.15); border-radius:50%;
     top:50%; left:50%; transform:translate(-50%,-50%);
   }
-  .orbit-ring.r1{width:400px; height:400px; animation:spin 40s linear infinite;}
-  .orbit-ring.r2{width:460px; height:460px; border-style:dashed; animation:spin 70s linear infinite reverse;}
+  .orbit-ring.r1{width:310px; height:310px; animation:spin 40s linear infinite;}
+  .orbit-ring.r2{width:360px; height:360px; border-style:dashed; animation:spin 70s linear infinite reverse;}
   @keyframes spin{from{transform:translate(-50%,-50%) rotate(0deg);} to{transform:translate(-50%,-50%) rotate(360deg);}}
-  #center-caption{margin-top:18px; text-align:center;}
+  #center-caption{margin-top:10px; text-align:center;}
   #center-caption .title{font-family:'Space Grotesk'; letter-spacing:4px; font-size:13px; color:var(--text-mid);}
   #center-caption .sub{font-family:'JetBrains Mono'; font-size:11px; color:var(--text-dim); margin-top:6px;}
   #mic-btn{
-    margin-top:26px;
-    width:64px; height:64px;
+    margin-top:14px;
+    width:56px; height:56px;
     border-radius:50%;
     border:1px solid var(--cyan);
     background:rgba(47,230,255,0.05);
@@ -136,8 +139,12 @@
     display:flex; align-items:center; justify-content:center;
     transition:background .2s ease, box-shadow .2s ease;
   }
-  #mic-btn svg{width:26px; height:26px;}
+  #mic-btn svg{width:22px; height:22px;}
   #mic-btn:hover{background:rgba(47,230,255,0.12);}
+  #mic-btn.idle-listening{
+    box-shadow:0 0 0 0 rgba(47,230,255,0.35);
+    animation:mic-idle-pulse 2.6s ease-out infinite;
+  }
   #mic-btn.listening{
     background:var(--cyan);
     color:#031014;
@@ -148,8 +155,12 @@
     0%{box-shadow:0 0 0 0 rgba(47,230,255,0.45);}
     100%{box-shadow:0 0 0 22px rgba(47,230,255,0);}
   }
+  @keyframes mic-idle-pulse{
+    0%{box-shadow:0 0 0 0 rgba(47,230,255,0.25);}
+    100%{box-shadow:0 0 0 12px rgba(47,230,255,0);}
+  }
   #mic-status{
-    margin-top:12px; font-family:'JetBrains Mono'; font-size:11px; color:var(--text-dim); min-height:14px;
+    margin-top:8px; font-family:'JetBrains Mono'; font-size:11px; color:var(--text-dim); min-height:14px;
   }
   #right-col{
     grid-area:right;
@@ -252,7 +263,7 @@
           <line x1="8" y1="23" x2="16" y2="23"/>
         </svg>
       </button>
-      <div id="mic-status">Tap to talk</div>
+      <div id="mic-status">Starting mic...</div>
     </div>
 
     <div id="right-col">
@@ -340,74 +351,129 @@
   }
   draw();
 
-  // ---- VOICE ASSISTANT (free, browser-based) ----
+  // ---- VOICE ASSISTANT (free, browser-based, always listening for "DeepSea") ----
   const micBtn = document.getElementById('mic-btn');
   const micStatus = document.getElementById('mic-status');
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const WAKE_WORDS = ['deepsea', 'deep sea', 'डीपसी', 'डीप सी', 'dipsi', 'dipsy'];
+
+  let isSpeaking = false;
+  let shouldBeListening = true;
 
   function speak(text){
+    isSpeaking = true;
+    try { recognition.stop(); } catch(e){}
     const utter = new SpeechSynthesisUtterance(text);
     utter.lang = 'hi-IN';
     utter.rate = 1;
     utter.pitch = 1;
+    utter.onend = () => {
+      isSpeaking = false;
+      startListening();
+    };
     window.speechSynthesis.speak(utter);
   }
 
+  function findWakeWord(text){
+    const lower = text.toLowerCase();
+    for (const w of WAKE_WORDS) {
+      const idx = lower.indexOf(w.toLowerCase());
+      if (idx !== -1) {
+        return text.slice(idx + w.length).trim();
+      }
+    }
+    return null;
+  }
+
+  async function sendToDeepSea(command){
+    micBtn.classList.remove('idle-listening');
+    micBtn.classList.add('listening');
+    micStatus.textContent = 'Thinking...';
+    logLine('YOU', command);
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: command })
+      });
+      const data = await res.json();
+      const reply = data.reply || 'माफ़ कीजिए, कुछ गड़बड़ हो गई।';
+      logLine('DEEPSEA', reply);
+      micBtn.classList.remove('listening');
+      speak(reply);
+    } catch (err) {
+      micBtn.classList.remove('listening');
+      micStatus.textContent = 'Connection error';
+      logLine('SYSTEM', 'Could not reach DeepSea brain.');
+      startListening();
+    }
+  }
+
+  let recognition;
+  let awaitingCommand = false;
+
+  function startListening(){
+    if (!shouldBeListening || isSpeaking) return;
+    try { recognition.start(); } catch(e){ /* already started */ }
+  }
+
   if (!SpeechRecognition) {
-    micStatus.textContent = 'Voice not supported in this browser — use Chrome';
+    micStatus.textContent = 'Voice not supported — use Chrome';
     micBtn.disabled = true;
   } else {
-    const recognition = new SpeechRecognition();
+    recognition = new SpeechRecognition();
     recognition.lang = 'hi-IN';
-    recognition.continuous = false;
+    recognition.continuous = true;
     recognition.interimResults = false;
 
-    let listening = false;
-
-    micBtn.addEventListener('click', () => {
-      if (listening) return;
-      recognition.start();
-    });
-
     recognition.onstart = () => {
-      listening = true;
-      micBtn.classList.add('listening');
-      micStatus.textContent = 'Listening...';
+      micBtn.classList.add('idle-listening');
+      micStatus.textContent = awaitingCommand ? 'Sun raha hoon...' : 'Kaho "DeepSea"...';
     };
 
     recognition.onend = () => {
-      listening = false;
-      micBtn.classList.remove('listening');
+      micBtn.classList.remove('idle-listening');
+      if (shouldBeListening && !isSpeaking) {
+        setTimeout(startListening, 300);
+      }
     };
 
     recognition.onerror = (e) => {
-      listening = false;
-      micBtn.classList.remove('listening');
-      micStatus.textContent = 'Mic error — tap to retry';
-      logLine('SYSTEM', `Voice error: ${e.error}`);
-    };
-
-    recognition.onresult = async (event) => {
-      const spokenText = event.results[0][0].transcript;
-      micStatus.textContent = 'Thinking...';
-      logLine('YOU', spokenText);
-
-      try {
-        const res = await fetch('/api/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: spokenText })
-        });
-        const data = await res.json();
-        const reply = data.reply || "Sorry, something went wrong.";
-        logLine('DEEPSEA', reply);
-        speak(reply);
-        micStatus.textContent = 'Tap to talk';
-      } catch (err) {
-        micStatus.textContent = 'Connection error — tap to retry';
-        logLine('SYSTEM', 'Could not reach DeepSea brain.');
+      if (e.error !== 'no-speech') {
+        logLine('SYSTEM', `Voice error: ${e.error}`);
       }
     };
+
+    recognition.onresult = (event) => {
+      const last = event.results[event.results.length - 1];
+      if (!last.isFinal) return;
+      const spokenText = last[0].transcript;
+
+      if (awaitingCommand) {
+        awaitingCommand = false;
+        sendToDeepSea(spokenText);
+        return;
+      }
+
+      const afterWake = findWakeWord(spokenText);
+      if (afterWake !== null) {
+        if (afterWake.length > 2) {
+          sendToDeepSea(afterWake);
+        } else {
+          awaitingCommand = true;
+          micStatus.textContent = 'Ji, boliye...';
+          speak('जी, बोलिए');
+        }
+      }
+    };
+
+    micBtn.addEventListener('click', () => {
+      awaitingCommand = true;
+      micStatus.textContent = 'Boliye...';
+    });
+
+    // Ask for mic permission and start listening as soon as the page loads.
+    startListening();
   }
 </script>
 </body>
