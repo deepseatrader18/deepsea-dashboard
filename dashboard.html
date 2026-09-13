@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DEEPSEA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --void:#050a12;
+    --void-deep:#02060b;
+    --panel:#0a1626;
+    --panel-edge:rgba(47,230,255,0.28);
+    --cyan:#2fe6ff;
+    --cyan-dim:rgba(47,230,255,0.45);
+    --teal:#17e8b0;
+    --amber:#ffb020;
+    --danger:#ff4d5e;
+    --text-hi:#e6f4fb;
+    --text-mid:#8fa8bd;
+    --text-dim:#4c6377;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%;}
+  body{
+    background:
+      radial-gradient(ellipse at 30% 20%, rgba(23,60,90,0.35), transparent 55%),
+      radial-gradient(ellipse at 80% 80%, rgba(23,232,176,0.06), transparent 50%),
+      var(--void-deep);
+    color:var(--text-hi);
+    font-family:'Inter', sans-serif;
+    overflow:hidden;
+    height:100vh;
+    position:relative;
+  }
+
+  .mono{font-family:'JetBrains Mono', monospace;}
+  .head-font{font-family:'Space Grotesk', sans-serif;}
+
+  #dashboard{
+    display:grid;
+    height:100vh;
+    grid-template-columns: 240px 1fr 300px;
+    grid-template-rows: 62px 1fr 130px;
+    grid-template-areas:
+      "topbar topbar topbar"
+      "left   center right"
+      "left   feed   right";
+  }
+  #dashboard.active{display:grid;}
+
+  #world-map{
+    position:absolute;
+    top:62px; left:240px; right:300px; bottom:130px;
+    opacity:0.05;
+    pointer-events:none;
+  }
+
+  #topbar{
+    grid-area:topbar;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:0 22px;
+    border-bottom:1px solid rgba(47,230,255,0.15);
+    background:rgba(6,14,24,0.6);
+  }
+  .brand{display:flex; align-items:center; gap:12px;}
+  .brand .dot{
+    width:7px; height:7px; border-radius:50%;
+    background:var(--teal); box-shadow:0 0 10px 2px var(--teal);
+  }
+  .brand-name{font-family:'Space Grotesk'; font-weight:700; letter-spacing:3px; font-size:15px;}
+  .brand-name span{color:var(--cyan);}
+  #topbar .status-cluster{display:flex; gap:22px;}
+  .status-chip{
+    display:flex; align-items:center; gap:7px;
+    font-size:11px; color:var(--text-mid); letter-spacing:1px;
+  }
+  .status-chip .led{width:6px; height:6px; border-radius:50%; background:var(--text-dim);}
+  .status-chip.on .led{background:var(--teal); box-shadow:0 0 8px 1px var(--teal);}
+  .status-chip.warn .led{background:var(--amber); box-shadow:0 0 8px 1px var(--amber);}
+  #clock{font-family:'JetBrains Mono'; font-size:12.5px; color:var(--text-mid);}
+
+  .panel{
+    background:rgba(9,18,30,0.55);
+    border:1px solid rgba(47,230,255,0.14);
+    position:relative;
+    padding:16px 16px 14px;
+    display:flex; flex-direction:column;
+  }
+  .panel-title{
+    font-family:'Space Grotesk'; font-size:11px; letter-spacing:2px;
+    color:var(--text-mid); margin-bottom:14px; display:flex; justify-content:space-between;
+  }
+  .panel-title .tag{color:var(--cyan-dim); font-size:10px;}
+
+  #left-col{
+    grid-area:left;
+    border-right:1px solid rgba(47,230,255,0.12);
+    padding:16px 14px;
+    display:flex; flex-direction:column; gap:14px;
+    overflow-y:auto;
+  }
+  .gauge-panel{align-items:center;}
+  .gauge{position:relative; width:120px; height:120px; margin:4px auto 8px;}
+  .gauge svg{width:100%; height:100%; transform:rotate(-90deg);}
+  .gauge-track{fill:none; stroke:rgba(143,168,189,0.12); stroke-width:8;}
+  .gauge-fill{fill:none; stroke:var(--cyan); stroke-width:8; stroke-linecap:round; filter:drop-shadow(0 0 6px var(--cyan-dim));}
+  .gauge-value{
+    position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  }
+  .gauge-value .num{font-family:'JetBrains Mono'; font-size:19px; font-weight:700;}
+  .gauge-value .lbl{font-size:9px; color:var(--text-dim); letter-spacing:1px; margin-top:2px;}
+  .stat-row{display:flex; justify-content:space-between; font-size:11.5px; padding:6px 0; border-top:1px solid rgba(143,168,189,0.08);}
+  .stat-row .k{color:var(--text-dim);}
+  .stat-row .v{font-family:'JetBrains Mono'; color:var(--text-hi);}
+
+  #center-col{
+    grid-area:center;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    position:relative;
+  }
+  #globe-wrap{position:relative; width:340px; height:340px;}
+  #globe-canvas{width:100%; height:100%;}
+  .orbit-ring{
+    position:absolute; border:1px solid rgba(47,230,255,0.15); border-radius:50%;
+    top:50%; left:50%; transform:translate(-50%,-50%);
+  }
+  .orbit-ring.r1{width:400px; height:400px; animation:spin 40s linear infinite;}
+  .orbit-ring.r2{width:460px; height:460px; border-style:dashed; animation:spin 70s linear infinite reverse;}
+  @keyframes spin{from{transform:translate(-50%,-50%) rotate(0deg);} to{transform:translate(-50%,-50%) rotate(360deg);}}
+  #center-caption{margin-top:18px; text-align:center;}
+  #center-caption .title{font-family:'Space Grotesk'; letter-spacing:4px; font-size:13px; color:var(--text-mid);}
+  #center-caption .sub{font-family:'JetBrains Mono'; font-size:11px; color:var(--text-dim); margin-top:6px;}
+
+  #right-col{
+    grid-area:right;
+    border-left:1px solid rgba(47,230,255,0.12);
+    padding:16px 14px;
+    display:flex; flex-direction:column; gap:12px;
+    overflow-y:auto;
+  }
+  .agent-row{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:10px 12px;
+    background:rgba(255,255,255,0.015);
+    border:1px solid rgba(143,168,189,0.1);
+    font-size:12px;
+  }
+  .agent-row .name{display:flex; align-items:center; gap:8px;}
+  .agent-row .led{width:6px; height:6px; border-radius:50%; background:var(--text-dim);}
+  .agent-row.online .led{background:var(--teal); box-shadow:0 0 6px 1px var(--teal);}
+  .agent-row .state{color:var(--text-dim); font-family:'JetBrains Mono'; font-size:10.5px;}
+
+  #feed-col{
+    grid-area:feed;
+    border-top:1px solid rgba(47,230,255,0.12);
+    padding:12px 20px;
+    overflow-y:auto;
+    display:flex; flex-direction:column-reverse;
+  }
+  .feed-line{
+    font-family:'JetBrains Mono'; font-size:11.5px; color:var(--text-mid);
+    padding:4px 0; display:flex; gap:12px;
+  }
+  .feed-line .t{color:var(--text-dim);}
+  .feed-line .src{color:var(--cyan-dim);}
+
+  ::-webkit-scrollbar{width:5px;}
+  ::-webkit-scrollbar-thumb{background:rgba(47,230,255,0.2);}
+</style>
+</head>
+<body>
+
+  <div id="dashboard" class="active">
+
+    <div id="topbar">
+      <div class="brand">
+        <span class="dot"></span>
+        <span class="brand-name">DEEP<span>SEA</span></span>
+      </div>
+      <div class="status-cluster">
+        <div class="status-chip on"><span class="led"></span>MT5 BRIDGE</div>
+        <div class="status-chip on"><span class="led"></span>TELEGRAM</div>
+        <div class="status-chip warn"><span class="led"></span>AGENTS IDLE</div>
+      </div>
+      <div style="display:flex; align-items:center; gap:18px;">
+        <div id="clock" class="mono">--:--:--</div>
+        <a href="/logout" style="font-family:'Space Grotesk'; font-size:11px; letter-spacing:1px; color:var(--text-dim); text-decoration:none; border:1px solid rgba(143,168,189,0.25); padding:5px 10px;">LOGOUT</a>
+      </div>
+    </div>
+
+    <div id="left-col">
+      <div class="panel gauge-panel">
+        <div class="panel-title">EQUITY <span class="tag">LIVE</span></div>
+        <div class="gauge">
+          <svg viewBox="0 0 120 120">
+            <circle class="gauge-track" cx="60" cy="60" r="52"/>
+            <circle class="gauge-fill" cx="60" cy="60" r="52" stroke-dasharray="326" stroke-dashoffset="90"/>
+          </svg>
+          <div class="gauge-value"><span class="num">--</span><span class="lbl">USD</span></div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">ACCOUNT</div>
+        <div class="stat-row"><span class="k">Balance</span><span class="v">--</span></div>
+        <div class="stat-row"><span class="k">Open P/L</span><span class="v">--</span></div>
+        <div class="stat-row"><span class="k">Margin</span><span class="v">--</span></div>
+        <div class="stat-row"><span class="k">Positions</span><span class="v">--</span></div>
+      </div>
+    </div>
+
+    <svg id="world-map" viewBox="0 0 1000 500" preserveAspectRatio="xMidYMid slice">
+      <path fill="none" stroke="#2fe6ff" stroke-width="1"
+        d="M120,220 Q200,180 260,220 T420,210 T600,230 T800,200 T950,230 M100,300 Q300,340 500,300 T900,320"/>
+      <circle cx="220" cy="230" r="2" fill="#2fe6ff"/>
+      <circle cx="520" cy="215" r="2" fill="#2fe6ff"/>
+      <circle cx="780" cy="205" r="2" fill="#2fe6ff"/>
+    </svg>
+
+    <div id="center-col">
+      <div id="globe-wrap">
+        <div class="orbit-ring
