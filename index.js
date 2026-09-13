@@ -44,7 +44,6 @@ app.get('/', requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, 'dashboard.html'));
 });
 
-// Voice assistant "brain" — sends the spoken text to Gemini and returns a reply.
 app.post('/api/chat', requireAuth, async (req, res) => {
   const userText = (req.body && req.body.text) || '';
   if (!userText.trim()) {
@@ -57,10 +56,11 @@ app.post('/api/chat', requireAuth, async (req, res) => {
   try {
     const systemInstruction =
       "You are DeepSea, a calm and confident AI assistant helping run a personal trading and automation system. " +
+      "Always reply in Hindi (Devanagari script), even if the user speaks in English or Hinglish. " +
       "Keep replies short (1-3 sentences), spoken-friendly, and to the point. Never use markdown formatting, asterisks, or bullet points, since your reply is read aloud.";
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${GEMINI_API_KEY}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
