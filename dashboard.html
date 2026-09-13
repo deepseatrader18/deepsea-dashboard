@@ -220,4 +220,100 @@
 
     <div id="center-col">
       <div id="globe-wrap">
-        <div class="orbit-ring
+        <div class="orbit-ring r1"></div>
+        <div class="orbit-ring r2"></div>
+        <canvas id="globe-canvas" width="340" height="340"></canvas>
+      </div>
+      <div id="center-caption">
+        <div class="title">COMMAND CENTER</div>
+        <div class="sub" id="uptime-line">STANDBY — AWAITING MODULES</div>
+      </div>
+    </div>
+
+    <div id="right-col">
+      <div class="panel-title" style="padding-top:2px;">AGENTS</div>
+      <div class="agent-row"><div class="name"><span class="led"></span>DeepSea (core)</div><div class="state">STANDBY</div></div>
+      <div class="agent-row"><div class="name"><span class="led"></span>Mercury · Gmail</div><div class="state">PENDING</div></div>
+      <div class="agent-row"><div class="name"><span class="led"></span>Venus · WhatsApp</div><div class="state">PENDING</div></div>
+      <div class="agent-row"><div class="name"><span class="led"></span>Mars · Instagram</div><div class="state">PENDING</div></div>
+      <div class="agent-row"><div class="name"><span class="led"></span>Jupiter · YouTube</div><div class="state">PENDING</div></div>
+      <div class="agent-row online"><div class="name"><span class="led"></span>MT5 Bridge</div><div class="state">ONLINE</div></div>
+    </div>
+
+    <div id="feed-col" class="mono">
+      <div class="feed-line"><span class="t">--:--:--</span><span class="src">SYSTEM</span><span>Dashboard shell initialized. Waiting for live feed connection.</span></div>
+    </div>
+
+  </div>
+
+<script>
+  function startClock(){
+    const clock = document.getElementById('clock');
+    function tick(){
+      clock.textContent = new Date().toLocaleTimeString('en-GB', { hour12:false });
+    }
+    tick();
+    setInterval(tick, 1000);
+  }
+
+  function logLine(src, msg){
+    const feed = document.getElementById('feed-col');
+    const line = document.createElement('div');
+    line.className = 'feed-line';
+    const t = new Date().toLocaleTimeString('en-GB', { hour12:false });
+    line.innerHTML = `<span class="t">${t}</span><span class="src">${src}</span><span>${msg}</span>`;
+    feed.prepend(line);
+  }
+
+  startClock();
+  logLine('SYSTEM', 'Access granted. Welcome back.');
+
+  const canvas = document.getElementById('globe-canvas');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const R = 130;
+  const particles = [];
+  const N = 260;
+
+  for(let i=0;i<N;i++){
+    const theta = Math.acos(2*Math.random()-1);
+    const phi = Math.random()*2*Math.PI;
+    particles.push({theta, phi, speed: 0.002 + Math.random()*0.001});
+  }
+
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    const cx = W/2, cy = H/2;
+    const pts = particles.map(p=>{
+      p.phi += p.speed;
+      const x = R*Math.sin(p.theta)*Math.cos(p.phi);
+      const y = R*Math.cos(p.theta);
+      const z = R*Math.sin(p.theta)*Math.sin(p.phi);
+      return {x,y,z};
+    });
+    pts.sort((a,b)=>a.z-b.z);
+    for(const p of pts){
+      const scale = (p.z+R)/(2*R);
+      const px = cx + p.x;
+      const py = cy + p.y;
+      const size = 0.6 + scale*1.8;
+      const alpha = 0.15 + scale*0.7;
+      ctx.beginPath();
+      ctx.arc(px, py, size, 0, Math.PI*2);
+      ctx.fillStyle = `rgba(47,230,255,${alpha})`;
+      ctx.fill();
+    }
+    const grad = ctx.createRadialGradient(cx,cy,10,cx,cy,R*0.9);
+    grad.addColorStop(0, 'rgba(23,232,176,0.10)');
+    grad.addColorStop(1, 'rgba(23,232,176,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(cx,cy,R*0.9,0,Math.PI*2);
+    ctx.fill();
+
+    requestAnimationFrame(draw);
+  }
+  draw();
+</script>
+</body>
+</html>
