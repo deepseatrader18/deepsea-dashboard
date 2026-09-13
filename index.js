@@ -15,6 +15,20 @@ app.use(session({
 
 const MASTER_PASSWORD = process.env.MASTER_PASSWORD;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const VPS_STATUS_URL = process.env.VPS_STATUS_URL;
+const VPS_STATUS_KEY = process.env.VPS_STATUS_KEY;
+
+async function getMT5Status() {
+  if (!VPS_STATUS_URL || !VPS_STATUS_KEY) return null;
+  try {
+    const res = await fetch(`${VPS_STATUS_URL}?key=${VPS_STATUS_KEY}`, { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (err) {
+    console.error('MT5 status fetch failed:', err.message);
+    return null;
+  }
+}
 
 function requireAuth(req, res, next) {
   if (req.session && req.session.authenticated) {
@@ -54,9 +68,15 @@ app.post('/api/chat', requireAuth, async (req, res) => {
   }
 
   try {
+    const mt5Status = await getMT5Status();
+    const statusText = mt5Status
+      ? `Current live MT5 account data — Balance: ${mt5Status.balance}, Equity: ${mt5Status.equity}, Open Trades: ${mt5Status.openTrades}.`
+      : 'Live MT5 account data is not available right now.';
+
     const systemInstruction =
       "You are DeepSea, a calm and confident AI assistant helping run a personal trading and automation system. " +
       "Always reply in Hindi (Devanagari script), even if the user speaks in English or Hinglish. " +
+      `${statusText} Use this real data to answer questions about balance, equity, or open trades accurately — never guess or make up numbers. ` +
       "Keep replies short (1-3 sentences), spoken-friendly, and to the point. Never use markdown formatting, asterisks, or bullet points, since your reply is read aloud.";
 
     const response = await fetch(
