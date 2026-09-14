@@ -26,7 +26,7 @@ const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD;
 const TECHNICAL_SERVICE_URL = process.env.TECHNICAL_SERVICE_URL;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
-const ENV = { VPS_STATUS_URL, VPS_STATUS_KEY, GMAIL_USER, GMAIL_APP_PASSWORD, TECHNICAL_SERVICE_URL, OPENAI_API_KEY };
+const ENV = { VPS_STATUS_URL, VPS_STATUS_KEY, GMAIL_USER, GMAIL_APP_PASSWORD, TECHNICAL_SERVICE_URL, OPENAI_API_KEY, GEMINI_API_KEY };
 const AGENTS = buildAgents(ENV);
 
 const SYMBOL_KEYWORDS = {
@@ -131,7 +131,7 @@ app.post('/api/chat', requireAuth, async (req, res) => {
       ]);
       const plan = await buildTradePlan(ENV, { symbol, news, technical });
       tradePlanText = plan.available
-        ? `Trade plan for ${symbol} — action: ${plan.data.action}, confidence: ${plan.data.confidence}, support: ${plan.data.support}, resistance: ${plan.data.resistance}. Reasoning: ${plan.data.reasoning}`
+        ? `Trade plan for ${symbol} — action: ${plan.data.action}, confidence: ${plan.data.confidence}, entry: ${plan.data.entry}, stop-loss: ${plan.data.stopLoss}, take-profit: ${plan.data.takeProfit}, support: ${plan.data.support}, resistance: ${plan.data.resistance}. Reasoning: ${plan.data.reasoning}. The user trades manually, so clearly state the action, entry, stop-loss, and take-profit levels — they will place the trade themselves.`
         : `A trade plan for ${symbol} was requested but is not available right now (${plan.reason}). Tell the user honestly that trading data isn't available, don't make up a plan.`;
     }
 

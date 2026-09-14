@@ -99,7 +99,7 @@ function buildAgents(env) {
       id: 'tradeplan',
       name: 'Trade Plan Agent (GPT)',
       async check() {
-        return env.OPENAI_API_KEY ? { connected: true } : { connected: false, reason: 'not configured' };
+        return env.GEMINI_API_KEY ? { connected: true } : { connected: false, reason: 'not configured' };
       }
     },
     {
