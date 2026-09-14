@@ -3,7 +3,7 @@ async function getTechnicalAnalysis(env, symbol) {
   try {
     const res = await fetch(
       `${env.TECHNICAL_SERVICE_URL}/analyze?symbol=${encodeURIComponent(symbol)}`,
-      { signal: AbortSignal.timeout(15000) }
+      { signal: AbortSignal.timeout(30000) }
     );
     if (!res.ok) {
       const body = await res.text().catch(() => '');

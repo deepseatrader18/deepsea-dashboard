@@ -30,8 +30,8 @@ const ENV = { VPS_STATUS_URL, VPS_STATUS_KEY, GMAIL_USER, GMAIL_APP_PASSWORD, TE
 const AGENTS = buildAgents(ENV);
 
 const SYMBOL_KEYWORDS = {
-  XAUUSD: ['gold', 'xau', 'सोना'],
-  BTCUSD: ['bitcoin', 'btc', 'बिटकॉइन'],
+  XAUUSD: ['gold', 'xau', 'सोना', 'गोल्ड'],
+  BTCUSD: ['bitcoin', 'btc', 'बिटकॉइन', 'बिटकोइन'],
   EURUSD: ['eur/usd', 'eur usd', 'euro', 'यूरो']
 };
 
