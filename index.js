@@ -25,8 +25,9 @@ const GMAIL_USER = process.env.GMAIL_USER;
 const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD;
 const TECHNICAL_SERVICE_URL = process.env.TECHNICAL_SERVICE_URL;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY;
 
-const ENV = { VPS_STATUS_URL, VPS_STATUS_KEY, GMAIL_USER, GMAIL_APP_PASSWORD, TECHNICAL_SERVICE_URL, OPENAI_API_KEY, GEMINI_API_KEY };
+const ENV = { VPS_STATUS_URL, VPS_STATUS_KEY, GMAIL_USER, GMAIL_APP_PASSWORD, TECHNICAL_SERVICE_URL, OPENAI_API_KEY, GEMINI_API_KEY, RAPIDAPI_KEY };
 const AGENTS = buildAgents(ENV);
 
 const SYMBOL_KEYWORDS = {
@@ -127,7 +128,7 @@ app.post('/api/chat', requireAuth, async (req, res) => {
     const symbol = detectSymbol(userText);
     if (symbol && isTradePlanRequest(userText)) {
       const [news, technical] = await Promise.all([
-        getForexFactoryNews(),
+        getForexFactoryNews(ENV),
         getTechnicalAnalysis(ENV, symbol)
       ]);
       const plan = await buildTradePlan(ENV, { symbol, news, technical });
