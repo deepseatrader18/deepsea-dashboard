@@ -6,7 +6,10 @@ async function getForexFactoryNews() {
       signal: AbortSignal.timeout(8000),
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; DeepSeaDashboard/1.0)' }
     });
-    if (!res.ok) return { available: false, reason: `http ${res.status}` };
+    if (!res.ok) {
+      console.error(`Forex Factory news fetch failed: http ${res.status}`);
+      return { available: false, reason: `http ${res.status}` };
+    }
     const events = await res.json();
     if (!Array.isArray(events)) return { available: false, reason: 'unexpected response shape' };
 
