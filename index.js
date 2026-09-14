@@ -4,7 +4,7 @@ const path = require('path');
 const { buildAgents, checkAllAgents } = require('./agents');
 const { getForexFactoryNews } = require('./trading/news');
 const { getTechnicalAnalysis } = require('./trading/technical');
-const { buildTradePlan } = require('./trading/tradePlan');
+const { runTradingPipeline } = require('./trading/pipeline');
 const app = express();
 
 app.use(express.urlencoded({ extended: true }));
@@ -122,7 +122,7 @@ app.get('/api/nexus', requireAuth, async (req, res) => {
 
     let plan = { available: false, reason: 'not requested' };
     if (technical.available) {
-      plan = await buildTradePlan(ENV, { symbol, news, technical });
+      plan = await runTradingPipeline(ENV, { symbol, news, technical });
     }
 
     res.json({
@@ -164,7 +164,7 @@ app.post('/api/chat', requireAuth, async (req, res) => {
         getForexFactoryNews(ENV),
         getTechnicalAnalysis(ENV, symbol)
       ]);
-      const plan = await buildTradePlan(ENV, { symbol, news, technical });
+      const plan = await runTradingPipeline(ENV, { symbol, news, technical });
       contextText += plan.available
         ? ` Trade plan for ${symbol} — action: ${plan.data.action}, confidence: ${plan.data.confidence}, entry: ${plan.data.entry}, stop-loss: ${plan.data.stopLoss}, take-profit: ${plan.data.takeProfit}, support: ${plan.data.support}, resistance: ${plan.data.resistance}. Reasoning: ${plan.data.reasoning}. The user trades manually, so clearly state the action, entry, stop-loss, and take-profit levels — they will place the trade themselves. Never guess or make up trading levels.`
         : ` A trade plan for ${symbol} was requested but is not available right now (${plan.reason}). Tell the user honestly that trading data isn't available, don't make up a plan.`;
