@@ -153,8 +153,11 @@
   }
   .agent-node .bubble .led{
     position:absolute; width:7px; height:7px; border-radius:50%;
-    background:var(--teal); box-shadow:0 0 6px 1px var(--teal);
+    background:var(--text-dim);
     transform:translate(11px,-11px);
+  }
+  .agent-node .bubble .led.online{
+    background:var(--teal); box-shadow:0 0 6px 1px var(--teal);
   }
   .agent-node .lbl{font-size:8.5px; color:var(--text-mid); text-align:center; line-height:1.2; font-family:'Space Grotesk';}
 
@@ -288,27 +291,27 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2v13"/><path d="M6 5c0 3 2 5 6 5s6-2 6-5"/><path d="M6 5l1 5h10l1-5"/><path d="M9 22l3-4 3 4"/></svg>
         </div>
         <div class="agent-node" style="transform:translate(calc(-50% + 0px), calc(-50% + -108px));">
-          <div class="bubble">🧠<span class="led"></span></div>
+          <div class="bubble">🧠<span class="led" id="node-led-core"></span></div>
           <div class="lbl">DeepSea<br>Core</div>
         </div>
         <div class="agent-node" style="transform:translate(calc(-50% + 94px), calc(-50% + -54px));">
-          <div class="bubble">✉️<span class="led"></span></div>
+          <div class="bubble">✉️<span class="led" id="node-led-gmail"></span></div>
           <div class="lbl">Mercury<br>Gmail</div>
         </div>
         <div class="agent-node" style="transform:translate(calc(-50% + 94px), calc(-50% + 54px));">
-          <div class="bubble">💬<span class="led"></span></div>
+          <div class="bubble">💬<span class="led" id="node-led-whatsapp"></span></div>
           <div class="lbl">Venus<br>WhatsApp</div>
         </div>
         <div class="agent-node" style="transform:translate(calc(-50% + 0px), calc(-50% + 108px));">
-          <div class="bubble">📷<span class="led"></span></div>
+          <div class="bubble">📷<span class="led" id="node-led-instagram"></span></div>
           <div class="lbl">Mars<br>Instagram</div>
         </div>
         <div class="agent-node" style="transform:translate(calc(-50% + -94px), calc(-50% + 54px));">
-          <div class="bubble">▶️<span class="led"></span></div>
+          <div class="bubble">▶️<span class="led" id="node-led-youtube"></span></div>
           <div class="lbl">Jupiter<br>YouTube</div>
         </div>
         <div class="agent-node" style="transform:translate(calc(-50% + -94px), calc(-50% + -54px));">
-          <div class="bubble">📊<span class="led"></span></div>
+          <div class="bubble">📊<span class="led" id="node-led-mt5"></span></div>
           <div class="lbl">MT5<br>Bridge</div>
         </div>
       </div>
@@ -362,12 +365,9 @@
     <div id="right-col">
       <div class="panel">
         <div class="panel-title"><span class="led"></span>AGENTS</div>
-        <div class="agent-row online"><div class="name"><span class="led"></span>DeepSea (core)</div><div class="state">ONLINE</div></div>
-        <div class="agent-row" id="row-gmail"><div class="name"><span class="led"></span>Mercury · Gmail</div><div class="state">--</div></div>
-        <div class="agent-row"><div class="name"><span class="led"></span>Venus · WhatsApp</div><div class="state">PENDING</div></div>
-        <div class="agent-row"><div class="name"><span class="led"></span>Mars · Instagram</div><div class="state">PENDING</div></div>
-        <div class="agent-row"><div class="name"><span class="led"></span>Jupiter · YouTube</div><div class="state">PENDING</div></div>
-        <div class="agent-row" id="row-mt5"><div class="name"><span class="led"></span>MT5 Bridge</div><div class="state">--</div></div>
+        <div id="agent-rows">
+          <div class="agent-row"><div class="name"><span class="led"></span>Loading agents…</div><div class="state">--</div></div>
+        </div>
       </div>
 
       <div class="panel" style="flex-shrink:0;">
@@ -466,15 +466,30 @@
     el.classList.add(connected ? 'on' : 'warn');
   }
 
-  function setAgentRow(el, connected, onlineLabel, offlineLabel){
-    if (!el) return;
-    el.classList.toggle('online', connected);
-    const state = el.querySelector('.state');
-    if (state) state.textContent = connected ? onlineLabel : offlineLabel;
-  }
+  const AGENT_REASON_LABEL = { 'not configured': 'PENDING' };
 
-  let lastMt5Connected = null;
+  const lastAgentConnected = {};
   let lastGmailUnread = null;
+
+  function renderAgentRows(agents){
+    const container = document.getElementById('agent-rows');
+    container.innerHTML = '';
+    agents.forEach(agent => {
+      const row = document.createElement('div');
+      row.className = 'agent-row' + (agent.connected ? ' online' : '');
+      const label = agent.connected ? 'ONLINE' : (AGENT_REASON_LABEL[agent.reason] || 'OFFLINE');
+      row.innerHTML = `<div class="name"><span class="led"></span>${agent.name}</div><div class="state">${label}</div>`;
+      container.appendChild(row);
+
+      const nodeLed = document.getElementById('node-led-' + agent.id);
+      if (nodeLed) nodeLed.classList.toggle('online', agent.connected);
+
+      if (lastAgentConnected[agent.id] !== undefined && lastAgentConnected[agent.id] !== agent.connected) {
+        logLine('SYSTEM', `${agent.name} ${agent.connected ? 'connected.' : 'disconnected.'}`);
+      }
+      lastAgentConnected[agent.id] = agent.connected;
+    });
+  }
 
   async function pollStatus(){
     try {
@@ -488,21 +503,17 @@
       document.getElementById('stat-pl').textContent = mt5.connected && typeof mt5.profit === 'number' ? fmtMoney(mt5.profit) : '--';
       document.getElementById('stat-positions').textContent = mt5.connected && typeof mt5.openTrades === 'number' ? mt5.openTrades : '--';
       setChip(document.getElementById('chip-mt5'), mt5.connected);
-      setAgentRow(document.getElementById('row-mt5'), mt5.connected, 'ONLINE', 'OFFLINE');
-      if (lastMt5Connected !== null && lastMt5Connected !== mt5.connected) {
-        logLine('SYSTEM', mt5.connected ? 'MT5 bridge connected.' : 'MT5 bridge lost connection.');
-      }
-      lastMt5Connected = mt5.connected;
 
       const gmail = data.gmail || { connected: false };
       setChip(document.getElementById('chip-gmail'), gmail.connected);
-      setAgentRow(document.getElementById('row-gmail'), gmail.connected, 'ONLINE', 'OFFLINE');
       if (gmail.connected && typeof gmail.unreadCount === 'number' && gmail.unreadCount !== lastGmailUnread) {
         if (lastGmailUnread !== null && gmail.unreadCount > lastGmailUnread && gmail.latest) {
           logLine('MERCURY', `New mail from ${gmail.latest.from}: "${gmail.latest.subject}"`);
         }
         lastGmailUnread = gmail.unreadCount;
       }
+
+      renderAgentRows(data.agents || []);
     } catch (err) {
       setChip(document.getElementById('chip-mt5'), false);
       setChip(document.getElementById('chip-gmail'), false);
