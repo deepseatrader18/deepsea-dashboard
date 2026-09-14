@@ -19,6 +19,10 @@ SYMBOL_MAP = {
 STOOQ_URL = "https://stooq.com/q/d/l/?s={symbol}&i=d"
 
 
+def ema(series: pd.Series, span: int) -> pd.Series:
+    return series.ewm(span=span, adjust=False).mean()
+
+
 def compute_rsi(close: pd.Series, period: int = 14) -> float:
     delta = close.diff()
     gain = delta.clip(lower=0)
@@ -28,6 +32,17 @@ def compute_rsi(close: pd.Series, period: int = 14) -> float:
     rs = avg_gain / avg_loss
     rsi = 100 - (100 / (1 + rs))
     return float(rsi.iloc[-1])
+
+
+def window_bias(close: pd.Series, window: int) -> str:
+    if len(close) < window + 1:
+        return "unknown"
+    change_pct = (close.iloc[-1] - close.iloc[-window]) / close.iloc[-window] * 100
+    if change_pct > 0.5:
+        return "up"
+    if change_pct < -0.5:
+        return "down"
+    return "flat"
 
 
 @app.get("/health")
@@ -62,9 +77,18 @@ def analyze(symbol: str):
 
     close = data["Close"]
     last_price = float(close.iloc[-1])
+
     sma20 = float(close.rolling(20).mean().iloc[-1])
     sma50 = float(close.rolling(50).mean().iloc[-1]) if len(close) >= 50 else None
     rsi14 = compute_rsi(close)
+
+    ema9 = float(ema(close, 9).iloc[-1])
+    ema50_series = ema(close, 50)
+    ema50 = float(ema50_series.iloc[-1]) if len(close) >= 50 else None
+
+    macd_line = ema(close, 12) - ema(close, 26)
+    macd_signal_series = ema(macd_line, 9)
+    macd_histogram = float((macd_line - macd_signal_series).iloc[-1]) if len(close) >= 26 else None
 
     recent = data.tail(30)
     resistance = float(recent["High"].max())
@@ -76,9 +100,18 @@ def analyze(symbol: str):
         "price": round(last_price, 2),
         "sma20": round(sma20, 2) if sma20 is not None else None,
         "sma50": round(sma50, 2) if sma50 is not None else None,
+        "ema9": round(ema9, 2) if ema9 is not None else None,
+        "ema50": round(ema50, 2) if ema50 is not None else None,
+        "macdHistogram": round(macd_histogram, 4) if macd_histogram is not None else None,
         "rsi14": round(rsi14, 2) if rsi14 == rsi14 else None,  # filter NaN
         "support": round(support, 2),
         "resistance": round(resistance, 2),
         "trend": trend,
+        "bias": {
+            "5d": window_bias(close, 5),
+            "20d": window_bias(close, 20),
+            "50d": window_bias(close, 50) if len(close) >= 50 else "unknown",
+            "90d": window_bias(close, 90) if len(close) >= 90 else "unknown",
+        },
         "asOf": datetime.now(timezone.utc).isoformat(),
     }
