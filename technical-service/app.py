@@ -72,25 +72,32 @@ def analyze(symbol: str):
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Market data fetch failed: {exc}")
 
-    if data.empty or len(data) < 20 or "Close" not in data.columns:
+    if data.empty or "Close" not in data.columns:
+        print(f"Stooq returned no usable rows for {symbol} ({stooq_symbol}). Raw response head: {resp.text[:300]!r}")
+        raise HTTPException(status_code=502, detail="No usable market data returned")
+
+    if len(data) < 2:
+        print(f"Stooq returned only {len(data)} row(s) for {symbol} ({stooq_symbol}). Raw response head: {resp.text[:300]!r}")
         raise HTTPException(status_code=502, detail="Not enough market data returned")
 
+    n = len(data)
     close = data["Close"]
     last_price = float(close.iloc[-1])
 
-    sma20 = float(close.rolling(20).mean().iloc[-1])
-    sma50 = float(close.rolling(50).mean().iloc[-1]) if len(close) >= 50 else None
-    rsi14 = compute_rsi(close)
+    sma20 = float(close.rolling(20).mean().iloc[-1]) if n >= 20 else None
+    sma50 = float(close.rolling(50).mean().iloc[-1]) if n >= 50 else None
+    rsi14 = compute_rsi(close) if n >= 15 else None
 
-    ema9 = float(ema(close, 9).iloc[-1])
-    ema50_series = ema(close, 50)
-    ema50 = float(ema50_series.iloc[-1]) if len(close) >= 50 else None
+    ema9 = float(ema(close, 9).iloc[-1]) if n >= 9 else None
+    ema50 = float(ema(close, 50).iloc[-1]) if n >= 50 else None
 
-    macd_line = ema(close, 12) - ema(close, 26)
-    macd_signal_series = ema(macd_line, 9)
-    macd_histogram = float((macd_line - macd_signal_series).iloc[-1]) if len(close) >= 26 else None
+    macd_histogram = None
+    if n >= 26:
+        macd_line = ema(close, 12) - ema(close, 26)
+        macd_signal_series = ema(macd_line, 9)
+        macd_histogram = float((macd_line - macd_signal_series).iloc[-1])
 
-    recent = data.tail(30)
+    recent = data.tail(min(30, n))
     resistance = float(recent["High"].max())
     support = float(recent["Low"].min())
     trend = "uptrend" if sma50 is not None and last_price > sma50 else ("downtrend" if sma50 is not None else "unknown")
@@ -103,15 +110,16 @@ def analyze(symbol: str):
         "ema9": round(ema9, 2) if ema9 is not None else None,
         "ema50": round(ema50, 2) if ema50 is not None else None,
         "macdHistogram": round(macd_histogram, 4) if macd_histogram is not None else None,
-        "rsi14": round(rsi14, 2) if rsi14 == rsi14 else None,  # filter NaN
+        "rsi14": round(rsi14, 2) if rsi14 is not None and rsi14 == rsi14 else None,  # filter NaN
         "support": round(support, 2),
         "resistance": round(resistance, 2),
         "trend": trend,
         "bias": {
-            "5d": window_bias(close, 5),
-            "20d": window_bias(close, 20),
-            "50d": window_bias(close, 50) if len(close) >= 50 else "unknown",
-            "90d": window_bias(close, 90) if len(close) >= 90 else "unknown",
+            "5d": window_bias(close, 5) if n >= 6 else "unknown",
+            "20d": window_bias(close, 20) if n >= 21 else "unknown",
+            "50d": window_bias(close, 50) if n >= 51 else "unknown",
+            "90d": window_bias(close, 90) if n >= 91 else "unknown",
         },
+        "dataPoints": n,
         "asOf": datetime.now(timezone.utc).isoformat(),
     }
