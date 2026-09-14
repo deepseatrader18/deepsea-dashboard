@@ -44,6 +44,16 @@ def compute_rsi(close: pd.Series, period: int = 14) -> float:
     return float(rsi.iloc[-1])
 
 
+def compute_atr(data: pd.DataFrame, period: int = 14) -> float:
+    high, low, close = data["High"], data["Low"], data["Close"]
+    prev_close = close.shift(1)
+    true_range = pd.concat(
+        [high - low, (high - prev_close).abs(), (low - prev_close).abs()], axis=1
+    ).max(axis=1)
+    atr = true_range.rolling(period).mean()
+    return float(atr.iloc[-1])
+
+
 def window_bias(close: pd.Series, window: int) -> str:
     if len(close) < window + 1:
         return "unknown"
@@ -151,6 +161,8 @@ def analyze(symbol: str):
         macd_signal_series = ema(macd_line, 9)
         macd_histogram = float((macd_line - macd_signal_series).iloc[-1])
 
+    atr14 = compute_atr(data) if n >= 15 else None
+
     recent = data.tail(min(30, n))
     resistance = float(recent["High"].max())
     support = float(recent["Low"].min())
@@ -165,6 +177,7 @@ def analyze(symbol: str):
         "ema50": round(ema50, 2) if ema50 is not None else None,
         "macdHistogram": round(macd_histogram, 4) if macd_histogram is not None else None,
         "rsi14": round(rsi14, 2) if rsi14 is not None and rsi14 == rsi14 else None,  # filter NaN
+        "atr14": round(atr14, 2) if atr14 is not None and atr14 == atr14 else None,  # filter NaN
         "support": round(support, 2),
         "resistance": round(resistance, 2),
         "trend": trend,

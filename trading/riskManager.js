@@ -10,6 +10,13 @@
 //    (news is the priority signal for this account), but the disagreement
 //    caps confidence so a "high" call never survives a real conflict.
 const MIN_RISK_REWARD = 3;
+// Stop-loss distance = ATR14 * ATR_MULTIPLIER (a standard volatility-scaled
+// stop), floored so it's never a fraction of a normal day's range and
+// capped from below only by a tighter genuine support/resistance level.
+const ATR_MULTIPLIER = 1.5;
+const MIN_DISTANCE_RATIO = 0.3;
+// Used only if ATR14 isn't available yet (e.g. too little price history).
+const FALLBACK_RISK_PCT = 0.01;
 
 function biasToDirection(bias) {
   if (bias === 'bullish') return 'buy';
@@ -64,16 +71,33 @@ function evaluateRisk({ technical, newsAgent, chartAgent }) {
   const t = technical.data;
   const price = t.price;
 
-  let stopLoss;
-  if (direction === 'buy') {
-    stopLoss = typeof t.support === 'number' && t.support < price ? t.support : price * 0.99;
-  } else {
-    stopLoss = typeof t.resistance === 'number' && t.resistance > price ? t.resistance : price * 1.01;
+  // Stop distance is bounded by recent volatility (ATR), not a raw 30-day
+  // high/low — during a strong trend that extreme can be huge (e.g. gold
+  // moving $1000s over a month), which would size the stop far wider than
+  // any real trader would risk. A genuine support/resistance level is only
+  // used to tighten the stop when it sits *closer* to price than the ATR
+  // distance — it can never widen the trade beyond the volatility-scaled
+  // amount.
+  const atrDistance = typeof t.atr14 === 'number' && t.atr14 > 0 ? t.atr14 * ATR_MULTIPLIER : price * FALLBACK_RISK_PCT;
+
+  let structDistance = null;
+  if (direction === 'buy' && typeof t.support === 'number' && t.support < price) {
+    structDistance = price - t.support;
+  } else if (direction === 'sell' && typeof t.resistance === 'number' && t.resistance > price) {
+    structDistance = t.resistance - price;
   }
 
-  const risk = Math.abs(price - stopLoss);
-  if (!(risk > 0) || risk / price < 0.0005) {
-    return holdResult({ technical, holdReason: 'No usable structural stop-loss level near the current price' });
+  let riskDistance = atrDistance;
+  if (structDistance != null && structDistance > 0 && structDistance < atrDistance) {
+    riskDistance = structDistance;
+  }
+  const minDistance = atrDistance * MIN_DISTANCE_RATIO;
+  if (riskDistance < minDistance) riskDistance = minDistance;
+
+  const stopLoss = direction === 'buy' ? price - riskDistance : price + riskDistance;
+  const risk = riskDistance;
+  if (!(risk > 0)) {
+    return holdResult({ technical, holdReason: 'No usable stop-loss distance could be computed' });
   }
 
   const reward = risk * MIN_RISK_REWARD;

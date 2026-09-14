@@ -531,7 +531,7 @@
     riskDot.style.background = riskApproved ? '#2fdb96' : '#ffb648';
     cabins[2].querySelector('.cabin-status-text').innerHTML = risk.available
       ? (riskApproved
-          ? `Approved — stop at structure, R:R locked <b>1:${risk.data.riskRewardRatio}</b>${risk.data.conflict ? '<br>(News overrode a conflicting Chart signal)' : ''}`
+          ? `Approved — ATR-sized stop, R:R locked <b>1:${risk.data.riskRewardRatio}</b>${risk.data.conflict ? '<br>(News overrode a conflicting Chart signal)' : ''}`
           : `Trade <b>REJECTED</b> — ${risk.holdReason || 'risk:reward not met'}`)
       : 'Waiting on technical data…';
 

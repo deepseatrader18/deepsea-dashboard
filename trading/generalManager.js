@@ -42,8 +42,8 @@ function finalizePlan({ symbol, newsAgent, chartAgent, risk }) {
     `${d.action.toUpperCase()} ${symbol}. ` +
     `News Agent: ${newsAgent.data.bias} (${newsAgent.data.confidence}) — ${newsAgent.data.summary || 'no summary'} ` +
     `Chart Agent: ${chartAgent.data.bias} (${chartAgent.data.confidence}) — ${chartAgent.data.summary || 'no summary'} ` +
-    `${sourceNote} Risk Manager placed the stop at the nearest structural level and sized take-profit for a strict ${rr} ` +
-    `risk:reward — this trade is only shown because it clears that bar.`;
+    `${sourceNote} Risk Manager sized the stop from recent volatility (ATR), tightened to a closer support/resistance ` +
+    `level when one exists, and set take-profit for a strict ${rr} risk:reward — this trade is only shown because it clears that bar.`;
 
   return {
     available: true,
