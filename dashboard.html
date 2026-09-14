@@ -270,8 +270,8 @@
         </div>
       </div>
       <div class="status-cluster">
-        <div class="status-chip on"><span class="led"></span>MT5 BRIDGE</div>
-        <div class="status-chip on"><span class="led"></span>TELEGRAM</div>
+        <div class="status-chip" id="chip-mt5"><span class="led"></span>MT5 BRIDGE</div>
+        <div class="status-chip" id="chip-gmail"><span class="led"></span>MERCURY GMAIL</div>
         <div class="status-chip warn"><span class="led"></span>AGENTS IDLE</div>
       </div>
       <div class="top-right">
@@ -315,10 +315,10 @@
 
       <div class="panel">
         <div class="panel-title"><span class="led"></span>ACCOUNT</div>
-        <div class="stat-row"><span class="k">Balance</span><span class="v">--</span></div>
-        <div class="stat-row"><span class="k">Equity</span><span class="v">--</span></div>
-        <div class="stat-row"><span class="k">Open P/L</span><span class="v">--</span></div>
-        <div class="stat-row"><span class="k">Positions</span><span class="v">--</span></div>
+        <div class="stat-row"><span class="k">Balance</span><span class="v" id="stat-balance">--</span></div>
+        <div class="stat-row"><span class="k">Equity</span><span class="v" id="stat-equity">--</span></div>
+        <div class="stat-row"><span class="k">Open P/L</span><span class="v" id="stat-pl">--</span></div>
+        <div class="stat-row"><span class="k">Positions</span><span class="v" id="stat-positions">--</span></div>
       </div>
 
       <div class="panel" id="mic-panel">
@@ -363,11 +363,11 @@
       <div class="panel">
         <div class="panel-title"><span class="led"></span>AGENTS</div>
         <div class="agent-row online"><div class="name"><span class="led"></span>DeepSea (core)</div><div class="state">ONLINE</div></div>
-        <div class="agent-row online"><div class="name"><span class="led"></span>Mercury · Gmail</div><div class="state">ONLINE</div></div>
+        <div class="agent-row" id="row-gmail"><div class="name"><span class="led"></span>Mercury · Gmail</div><div class="state">--</div></div>
         <div class="agent-row"><div class="name"><span class="led"></span>Venus · WhatsApp</div><div class="state">PENDING</div></div>
         <div class="agent-row"><div class="name"><span class="led"></span>Mars · Instagram</div><div class="state">PENDING</div></div>
         <div class="agent-row"><div class="name"><span class="led"></span>Jupiter · YouTube</div><div class="state">PENDING</div></div>
-        <div class="agent-row online"><div class="name"><span class="led"></span>MT5 Bridge</div><div class="state">ONLINE</div></div>
+        <div class="agent-row" id="row-mt5"><div class="name"><span class="led"></span>MT5 Bridge</div><div class="state">--</div></div>
       </div>
 
       <div class="panel" style="flex-shrink:0;">
@@ -454,6 +454,63 @@
 
   startClock();
   logLine('SYSTEM', 'Access granted. Welcome back.');
+
+  function fmtMoney(n){
+    if (typeof n !== 'number') return '--';
+    return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function setChip(el, connected){
+    if (!el) return;
+    el.classList.remove('on', 'warn');
+    el.classList.add(connected ? 'on' : 'warn');
+  }
+
+  function setAgentRow(el, connected, onlineLabel, offlineLabel){
+    if (!el) return;
+    el.classList.toggle('online', connected);
+    const state = el.querySelector('.state');
+    if (state) state.textContent = connected ? onlineLabel : offlineLabel;
+  }
+
+  let lastMt5Connected = null;
+  let lastGmailUnread = null;
+
+  async function pollStatus(){
+    try {
+      const res = await fetch('/api/status');
+      if (!res.ok) throw new Error('status ' + res.status);
+      const data = await res.json();
+
+      const mt5 = data.mt5 || { connected: false };
+      document.getElementById('stat-balance').textContent = mt5.connected ? fmtMoney(mt5.balance) : '--';
+      document.getElementById('stat-equity').textContent = mt5.connected ? fmtMoney(mt5.equity) : '--';
+      document.getElementById('stat-pl').textContent = mt5.connected && typeof mt5.profit === 'number' ? fmtMoney(mt5.profit) : '--';
+      document.getElementById('stat-positions').textContent = mt5.connected && typeof mt5.openTrades === 'number' ? mt5.openTrades : '--';
+      setChip(document.getElementById('chip-mt5'), mt5.connected);
+      setAgentRow(document.getElementById('row-mt5'), mt5.connected, 'ONLINE', 'OFFLINE');
+      if (lastMt5Connected !== null && lastMt5Connected !== mt5.connected) {
+        logLine('SYSTEM', mt5.connected ? 'MT5 bridge connected.' : 'MT5 bridge lost connection.');
+      }
+      lastMt5Connected = mt5.connected;
+
+      const gmail = data.gmail || { connected: false };
+      setChip(document.getElementById('chip-gmail'), gmail.connected);
+      setAgentRow(document.getElementById('row-gmail'), gmail.connected, 'ONLINE', 'OFFLINE');
+      if (gmail.connected && typeof gmail.unreadCount === 'number' && gmail.unreadCount !== lastGmailUnread) {
+        if (lastGmailUnread !== null && gmail.unreadCount > lastGmailUnread && gmail.latest) {
+          logLine('MERCURY', `New mail from ${gmail.latest.from}: "${gmail.latest.subject}"`);
+        }
+        lastGmailUnread = gmail.unreadCount;
+      }
+    } catch (err) {
+      setChip(document.getElementById('chip-mt5'), false);
+      setChip(document.getElementById('chip-gmail'), false);
+    }
+  }
+
+  pollStatus();
+  setInterval(pollStatus, 15000);
 
   document.querySelectorAll('.side-item').forEach(item => {
     item.addEventListener('click', () => {
