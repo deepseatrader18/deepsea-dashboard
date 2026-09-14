@@ -55,6 +55,7 @@ function finalizePlan({ symbol, newsAgent, chartAgent, risk }) {
       takeProfit: d.takeProfit,
       support: d.support,
       resistance: d.resistance,
+      riskRewardRatio: d.riskRewardRatio,
       reasoning
     }
   };

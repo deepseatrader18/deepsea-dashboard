@@ -5,6 +5,7 @@ const { buildAgents, checkAllAgents } = require('./agents');
 const { getForexFactoryNews } = require('./trading/news');
 const { getTechnicalAnalysis } = require('./trading/technical');
 const { runTradingPipeline } = require('./trading/pipeline');
+const { sendTelegramAlert, formatTradeAlert } = require('./trading/telegramAlert');
 const app = express();
 
 app.use(express.urlencoded({ extended: true }));
@@ -26,9 +27,31 @@ const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD;
 const TECHNICAL_SERVICE_URL = process.env.TECHNICAL_SERVICE_URL;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY;
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
-const ENV = { VPS_STATUS_URL, VPS_STATUS_KEY, GMAIL_USER, GMAIL_APP_PASSWORD, TECHNICAL_SERVICE_URL, OPENAI_API_KEY, GEMINI_API_KEY, RAPIDAPI_KEY };
+const ENV = {
+  VPS_STATUS_URL, VPS_STATUS_KEY, GMAIL_USER, GMAIL_APP_PASSWORD, TECHNICAL_SERVICE_URL,
+  OPENAI_API_KEY, GEMINI_API_KEY, RAPIDAPI_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+};
 const AGENTS = buildAgents(ENV);
+
+// Tracks the last-alerted action per symbol so a Telegram alert only fires
+// when the Risk Manager's call actually changes (new trade or a direction
+// flip) — not on every 60s dashboard poll while the same signal holds.
+const lastAlertedAction = {};
+
+function maybeSendTradeAlert(symbol, plan) {
+  const currentAction = plan.available ? plan.data.action : null;
+  const prevAction = lastAlertedAction[symbol];
+  // Only alert on a real new signal (buy/sell that wasn't already the last
+  // one we alerted on) — a "hold" in between resets state so the same
+  // direction coming back later counts as new again.
+  if (currentAction && currentAction !== 'hold' && currentAction !== prevAction) {
+    sendTelegramAlert(ENV, formatTradeAlert(symbol, plan)).catch(err => console.error('Telegram alert error:', err.message));
+  }
+  lastAlertedAction[symbol] = currentAction;
+}
 
 const SYMBOL_KEYWORDS = {
   XAUUSD: ['gold', 'xau', 'सोना', 'गोल्ड'],
@@ -126,6 +149,7 @@ app.get('/api/nexus', requireAuth, async (req, res) => {
       const pipeline = await runTradingPipeline(ENV, { symbol, news, technical });
       plan = pipeline.plan;
       agents = { news: pipeline.newsAgent, chart: pipeline.chartAgent, risk: pipeline.risk };
+      maybeSendTradeAlert(symbol, plan);
     }
 
     res.json({
