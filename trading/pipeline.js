@@ -13,7 +13,9 @@ async function runTradingPipeline(env, { symbol, news, technical }) {
   ]);
 
   const risk = evaluateRisk({ technical, newsAgent, chartAgent });
-  return finalizePlan({ symbol, newsAgent, chartAgent, risk });
+  const plan = finalizePlan({ symbol, newsAgent, chartAgent, risk });
+
+  return { plan, newsAgent, chartAgent, risk };
 }
 
 module.exports = { runTradingPipeline };
