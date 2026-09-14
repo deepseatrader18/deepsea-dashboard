@@ -14,42 +14,55 @@ function summarizeTechnical(technical) {
 }
 
 async function buildTradePlan(env, { symbol, news, technical }) {
-  if (!env.OPENAI_API_KEY) return { available: false, reason: 'OpenAI API key not configured' };
+  if (!env.GEMINI_API_KEY) return { available: false, reason: 'Gemini API key not configured' };
 
   const prompt =
-    `You are a trading analyst assistant. Analyze ${symbol} using the data below and propose a trade plan.\n\n` +
+    `You are an experienced trading analyst. The user trades manually and only wants your analysis — ` +
+    `they will place the trade themselves, so be specific and actionable.\n\n` +
+    `Analyze ${symbol} using the data below.\n\n` +
     `High-impact news this week:\n${summarizeNews(news)}\n\n` +
     `Technical data:\n${summarizeTechnical(technical)}\n\n` +
     'Respond with ONLY a JSON object (no markdown, no extra text) with exactly these keys: ' +
     '"action" (one of "buy", "sell", "hold"), "confidence" (one of "low", "medium", "high"), ' +
-    '"support" (number or null), "resistance" (number or null), "reasoning" (a 2-3 sentence explanation).';
+    '"entry" (a number: suggested entry price, or null if action is "hold"), ' +
+    '"stopLoss" (a number: suggested stop-loss price, or null if action is "hold"), ' +
+    '"takeProfit" (a number: suggested take-profit price, or null if action is "hold"), ' +
+    '"support" (number or null), "resistance" (number or null), ' +
+    '"reasoning" (a 2-3 sentence explanation citing the news and technical data).';
 
   try {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${env.OPENAI_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.3,
-        response_format: { type: 'json_object' }
-      }),
-      signal: AbortSignal.timeout(20000)
-    });
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${env.GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.3, responseMimeType: 'application/json' }
+        }),
+        signal: AbortSignal.timeout(20000)
+      }
+    );
 
     const data = await res.json();
     if (!res.ok) {
-      console.error('OpenAI trade plan error:', JSON.stringify(data));
+      console.error('Gemini trade plan error:', JSON.stringify(data));
       return { available: false, reason: data.error?.message || `http ${res.status}` };
     }
 
-    const text = data.choices?.[0]?.message?.content || '';
+    const text =
+      (data.candidates &&
+        data.candidates[0] &&
+        data.candidates[0].content &&
+        data.candidates[0].content.parts &&
+        data.candidates[0].content.parts[0] &&
+        data.candidates[0].content.parts[0].text) ||
+      '';
+
     let plan;
     try {
-      plan = JSON.parse(text);
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      plan = JSON.parse(jsonMatch ? jsonMatch[0] : text);
     } catch (parseErr) {
       console.error('Trade plan JSON parse failed:', text);
       return { available: false, reason: 'Could not parse trade plan response' };
