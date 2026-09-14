@@ -125,6 +125,97 @@ async function getFromRapidApi(rapidApiKey) {
   }
 }
 
+// The user's OpenAI key has no billing credits as of the last check, but
+// re-verify rather than assume — a quota error here is OpenAI's own answer,
+// not a guess. Note: without a browsing/search tool, this can only draw on
+// the model's training data, not literally today's news, so the prompt asks
+// it to say so rather than invent a "latest" headline.
+async function getFromOpenAI(openaiApiKey) {
+  try {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${openaiApiKey}`
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'user',
+            content:
+              'What are the major recurring or scheduled macroeconomic events that typically move gold, bitcoin, and EUR/USD (e.g. Fed meetings, US CPI/NFP releases)? ' +
+              "You do not have live internet access, so do not invent specific numbers or claim something happened 'today' or 'this week' — describe the kind of event and its usual market impact in 2-3 sentences."
+          }
+        ],
+        temperature: 0.3
+      }),
+      signal: AbortSignal.timeout(15000)
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      console.error('Forex Factory OpenAI fetch failed:', JSON.stringify(data));
+      return { available: false, reason: data.error?.message || `http ${res.status}` };
+    }
+
+    const text = data.choices?.[0]?.message?.content?.trim();
+    if (!text) return { available: false, reason: 'empty response' };
+
+    return { available: true, data: [{ title: 'AI market context (not live news)', summary: text }] };
+  } catch (err) {
+    console.error('Forex Factory OpenAI fetch failed:', err.message);
+    return { available: false, reason: err.message };
+  }
+}
+
+// Uses Gemini's Google Search grounding so the answer is backed by an
+// actual live search rather than the model's static training data — this
+// runs from Google's own infrastructure, so it isn't affected by Render's
+// IP being blocked the way forexfactory.com and Yahoo Finance block it.
+async function getFromGeminiSearch(geminiApiKey) {
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${geminiApiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                {
+                  text:
+                    'Search for the most important high-impact economic news and events from the last 24-48 hours ' +
+                    'likely to move gold (XAUUSD), bitcoin, or EUR/USD. List up to 5 items as short headlines with a ' +
+                    'one-line summary each. If you cannot find real current results, say so explicitly instead of guessing.'
+                }
+              ]
+            }
+          ],
+          tools: [{ google_search: {} }]
+        }),
+        signal: AbortSignal.timeout(20000)
+      }
+    );
+
+    const data = await res.json();
+    if (!res.ok) {
+      console.error('Forex Factory Gemini-search fetch failed:', JSON.stringify(data));
+      return { available: false, reason: data.error?.message || `http ${res.status}` };
+    }
+
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    if (!text) return { available: false, reason: 'empty response' };
+
+    return { available: true, data: [{ title: 'AI-searched market news', summary: text }] };
+  } catch (err) {
+    console.error('Forex Factory Gemini-search fetch failed:', err.message);
+    return { available: false, reason: err.message };
+  }
+}
+
 async function fetchForexFactoryNews(env) {
   const calendar = await getFromPublicCalendar();
   if (calendar.available) return calendar;
@@ -135,6 +226,16 @@ async function fetchForexFactoryNews(env) {
   if (env && env.RAPIDAPI_KEY) {
     const rapid = await getFromRapidApi(env.RAPIDAPI_KEY);
     if (rapid.available) return rapid;
+  }
+
+  if (env && env.GEMINI_API_KEY) {
+    const geminiSearch = await getFromGeminiSearch(env.GEMINI_API_KEY);
+    if (geminiSearch.available) return geminiSearch;
+  }
+
+  if (env && env.OPENAI_API_KEY) {
+    const openai = await getFromOpenAI(env.OPENAI_API_KEY);
+    if (openai.available) return openai;
   }
 
   return calendar; // return the (unavailable) calendar result — carries the most useful `reason`
