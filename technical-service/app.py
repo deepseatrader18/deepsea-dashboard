@@ -8,10 +8,10 @@ from fastapi import FastAPI, HTTPException
 
 app = FastAPI(title="DeepSea Technical Analysis Service")
 
-# Alpha Vantage's free tier caps at 25 requests/day, which live polling
-# traffic exhausted within a couple of hours. Twelve Data's free tier allows
-# 800 requests/day (8/min), giving enough headroom for continuous polling
-# across all 3 symbols.
+# Alpha Vantage's free tier caps at 25 requests/day, which real polling
+# traffic exhausts within a couple of hours. Twelve Data's free tier allows
+# 800 requests/day (8/min), which is enough headroom for continuous polling
+# across all 3 symbols even without aggressive caching.
 TWELVE_DATA_KEY = os.environ.get("TWELVE_DATA_API_KEY", "")
 TWELVE_DATA_URL = "https://api.twelvedata.com/time_series"
 
@@ -23,8 +23,7 @@ SYMBOL_MAP = {
 
 # Cache successes for a while to stay well under the rate limit, but also
 # cache failures (briefly) so a rate-limit or outage window doesn't turn
-# every dashboard poll into another outbound call while waiting for it to
-# clear.
+# every poll into another outbound call while we wait it out.
 CACHE_TTL_SUCCESS_SECONDS = 15 * 60
 CACHE_TTL_FAILURE_SECONDS = 2 * 60
 _cache = {}
@@ -43,6 +42,16 @@ def compute_rsi(close: pd.Series, period: int = 14) -> float:
     rs = avg_gain / avg_loss
     rsi = 100 - (100 / (1 + rs))
     return float(rsi.iloc[-1])
+
+
+def compute_atr(data: pd.DataFrame, period: int = 14) -> float:
+    high, low, close = data["High"], data["Low"], data["Close"]
+    prev_close = close.shift(1)
+    true_range = pd.concat(
+        [high - low, (high - prev_close).abs(), (low - prev_close).abs()], axis=1
+    ).max(axis=1)
+    atr = true_range.rolling(period).mean()
+    return float(atr.iloc[-1])
 
 
 def window_bias(close: pd.Series, window: int) -> str:
@@ -152,6 +161,8 @@ def analyze(symbol: str):
         macd_signal_series = ema(macd_line, 9)
         macd_histogram = float((macd_line - macd_signal_series).iloc[-1])
 
+    atr14 = compute_atr(data) if n >= 15 else None
+
     recent = data.tail(min(30, n))
     resistance = float(recent["High"].max())
     support = float(recent["Low"].min())
@@ -166,6 +177,7 @@ def analyze(symbol: str):
         "ema50": round(ema50, 2) if ema50 is not None else None,
         "macdHistogram": round(macd_histogram, 4) if macd_histogram is not None else None,
         "rsi14": round(rsi14, 2) if rsi14 is not None and rsi14 == rsi14 else None,  # filter NaN
+        "atr14": round(atr14, 2) if atr14 is not None and atr14 == atr14 else None,  # filter NaN
         "support": round(support, 2),
         "resistance": round(resistance, 2),
         "trend": trend,
