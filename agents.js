@@ -88,7 +88,7 @@ function buildAgents(env) {
       async check() {
         if (!env.TECHNICAL_SERVICE_URL) return { connected: false, reason: 'not configured' };
         try {
-          const res = await fetch(`${env.TECHNICAL_SERVICE_URL}/health`, { signal: AbortSignal.timeout(5000) });
+          const res = await fetch(`${env.TECHNICAL_SERVICE_URL}/health`, { signal: AbortSignal.timeout(30000) });
           return res.ok ? { connected: true } : { connected: false, reason: `http ${res.status}` };
         } catch (err) {
           return { connected: false, reason: err.message };

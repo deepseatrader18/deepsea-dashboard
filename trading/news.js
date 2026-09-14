@@ -2,7 +2,10 @@ const FF_CALENDAR_URL = 'https://nfs.faireconomy.media/ff_calendar_thisweek.json
 
 async function getForexFactoryNews() {
   try {
-    const res = await fetch(FF_CALENDAR_URL, { signal: AbortSignal.timeout(8000) });
+    const res = await fetch(FF_CALENDAR_URL, {
+      signal: AbortSignal.timeout(8000),
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; DeepSeaDashboard/1.0)' }
+    });
     if (!res.ok) return { available: false, reason: `http ${res.status}` };
     const events = await res.json();
     if (!Array.isArray(events)) return { available: false, reason: 'unexpected response shape' };
