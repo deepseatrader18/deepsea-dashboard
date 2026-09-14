@@ -7,6 +7,7 @@ async function getTechnicalAnalysis(env, symbol) {
     );
     if (!res.ok) {
       const body = await res.text().catch(() => '');
+      console.error(`Technical analysis fetch failed: http ${res.status}${body ? `: ${body}` : ''}`);
       return { available: false, reason: `http ${res.status}${body ? `: ${body}` : ''}` };
     }
     const data = await res.json();
