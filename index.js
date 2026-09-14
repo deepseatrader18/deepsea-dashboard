@@ -1,7 +1,7 @@
 const express = require('express');
 const session = require('express-session');
 const path = require('path');
-const { ImapFlow } = require('imapflow');
+const { buildAgents, checkAllAgents } = require('./agents');
 const app = express();
 
 app.use(express.urlencoded({ extended: true }));
@@ -21,55 +21,7 @@ const VPS_STATUS_KEY = process.env.VPS_STATUS_KEY;
 const GMAIL_USER = process.env.GMAIL_USER;
 const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD;
 
-async function getGmailStatus() {
-  if (!GMAIL_USER || !GMAIL_APP_PASSWORD) return null;
-  const client = new ImapFlow({
-    host: 'imap.gmail.com',
-    port: 993,
-    secure: true,
-    auth: { user: GMAIL_USER, pass: GMAIL_APP_PASSWORD },
-    logger: false
-  });
-  try {
-    await client.connect();
-    const lock = await client.getMailboxLock('INBOX');
-    let unreadCount = 0;
-    let latest = null;
-    try {
-      const status = await client.status('INBOX', { unseen: true });
-      unreadCount = status.unseen || 0;
-
-      if (unreadCount > 0) {
-        for await (const msg of client.fetch({ seen: false }, { envelope: true })) {
-          latest = {
-            from: msg.envelope.from && msg.envelope.from[0] ? msg.envelope.from[0].name || msg.envelope.from[0].address : 'unknown',
-            subject: msg.envelope.subject || '(no subject)'
-          };
-        }
-      }
-    } finally {
-      lock.release();
-    }
-    await client.logout();
-    return { unreadCount, latest };
-  } catch (err) {
-    console.error('Gmail check failed:', err.responseText || err.message);
-    try { await client.logout(); } catch (e) {}
-    return null;
-  }
-}
-
-async function getMT5Status() {
-  if (!VPS_STATUS_URL || !VPS_STATUS_KEY) return null;
-  try {
-    const res = await fetch(`${VPS_STATUS_URL}?key=${VPS_STATUS_KEY}`, { signal: AbortSignal.timeout(5000) });
-    if (!res.ok) return null;
-    return await res.json();
-  } catch (err) {
-    console.error('MT5 status fetch failed:', err.message);
-    return null;
-  }
-}
+const AGENTS = buildAgents({ VPS_STATUS_URL, VPS_STATUS_KEY, GMAIL_USER, GMAIL_APP_PASSWORD });
 
 function requireAuth(req, res, next) {
   if (req.session && req.session.authenticated) {
@@ -100,20 +52,23 @@ app.get('/', requireAuth, (req, res) => {
 });
 
 app.get('/api/status', requireAuth, async (req, res) => {
-  const [mt5Status, gmailStatus] = await Promise.all([getMT5Status(), getGmailStatus()]);
+  const agents = await checkAllAgents(AGENTS);
+  const mt5 = agents.find(a => a.id === 'mt5');
+  const gmail = agents.find(a => a.id === 'gmail');
 
   res.json({
-    mt5: mt5Status
+    agents,
+    mt5: mt5.connected
       ? {
           connected: true,
-          balance: mt5Status.balance,
-          equity: mt5Status.equity,
-          openTrades: mt5Status.openTrades,
-          profit: typeof mt5Status.profit === 'number' ? mt5Status.profit : null
+          balance: mt5.data.balance,
+          equity: mt5.data.equity,
+          openTrades: mt5.data.openTrades,
+          profit: typeof mt5.data.profit === 'number' ? mt5.data.profit : null
         }
       : { connected: false },
-    gmail: gmailStatus
-      ? { connected: true, unreadCount: gmailStatus.unreadCount, latest: gmailStatus.latest }
+    gmail: gmail.connected
+      ? { connected: true, unreadCount: gmail.data.unreadCount, latest: gmail.data.latest }
       : { connected: false }
   });
 });
@@ -128,15 +83,17 @@ app.post('/api/chat', requireAuth, async (req, res) => {
   }
 
   try {
-    const mt5Status = await getMT5Status();
-    const statusText = mt5Status
-      ? `Current live MT5 account data — Balance: ${mt5Status.balance}, Equity: ${mt5Status.equity}, Open Trades: ${mt5Status.openTrades}.`
+    const agents = await checkAllAgents(AGENTS);
+    const mt5 = agents.find(a => a.id === 'mt5');
+    const gmail = agents.find(a => a.id === 'gmail');
+
+    const statusText = mt5.connected
+      ? `Current live MT5 account data — Balance: ${mt5.data.balance}, Equity: ${mt5.data.equity}, Open Trades: ${mt5.data.openTrades}.`
       : 'Live MT5 account data is not available right now.';
 
-    const gmailStatus = await getGmailStatus();
-    const gmailText = gmailStatus
-      ? (gmailStatus.unreadCount > 0
-          ? `Gmail inbox: ${gmailStatus.unreadCount} unread email(s). Most recent unread is from ${gmailStatus.latest.from}, subject: "${gmailStatus.latest.subject}".`
+    const gmailText = gmail.connected
+      ? (gmail.data.unreadCount > 0
+          ? `Gmail inbox: ${gmail.data.unreadCount} unread email(s). Most recent unread is from ${gmail.data.latest.from}, subject: "${gmail.data.latest.subject}".`
           : 'Gmail inbox: no unread emails.')
       : 'Gmail data is not available right now.';
 
