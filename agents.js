@@ -1,4 +1,5 @@
 const { ImapFlow } = require('imapflow');
+const { getForexFactoryNews } = require('./trading/news');
 
 function buildAgents(env) {
   return [
@@ -69,6 +70,36 @@ function buildAgents(env) {
           try { await client.logout(); } catch (e) {}
           return { connected: false, reason };
         }
+      }
+    },
+    {
+      id: 'news',
+      name: 'News Agent (Forex Factory)',
+      async check() {
+        const result = await getForexFactoryNews();
+        return result.available
+          ? { connected: true, data: { highImpactCount: result.data.length } }
+          : { connected: false, reason: result.reason };
+      }
+    },
+    {
+      id: 'technical',
+      name: 'Technical Analysis Agent',
+      async check() {
+        if (!env.TECHNICAL_SERVICE_URL) return { connected: false, reason: 'not configured' };
+        try {
+          const res = await fetch(`${env.TECHNICAL_SERVICE_URL}/health`, { signal: AbortSignal.timeout(5000) });
+          return res.ok ? { connected: true } : { connected: false, reason: `http ${res.status}` };
+        } catch (err) {
+          return { connected: false, reason: err.message };
+        }
+      }
+    },
+    {
+      id: 'tradeplan',
+      name: 'Trade Plan Agent (GPT)',
+      async check() {
+        return env.OPENAI_API_KEY ? { connected: true } : { connected: false, reason: 'not configured' };
       }
     },
     {

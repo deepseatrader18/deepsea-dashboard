@@ -2,6 +2,9 @@ const express = require('express');
 const session = require('express-session');
 const path = require('path');
 const { buildAgents, checkAllAgents } = require('./agents');
+const { getForexFactoryNews } = require('./trading/news');
+const { getTechnicalAnalysis } = require('./trading/technical');
+const { buildTradePlan } = require('./trading/tradePlan');
 const app = express();
 
 app.use(express.urlencoded({ extended: true }));
@@ -20,8 +23,30 @@ const VPS_STATUS_URL = process.env.VPS_STATUS_URL;
 const VPS_STATUS_KEY = process.env.VPS_STATUS_KEY;
 const GMAIL_USER = process.env.GMAIL_USER;
 const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD;
+const TECHNICAL_SERVICE_URL = process.env.TECHNICAL_SERVICE_URL;
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
-const AGENTS = buildAgents({ VPS_STATUS_URL, VPS_STATUS_KEY, GMAIL_USER, GMAIL_APP_PASSWORD });
+const ENV = { VPS_STATUS_URL, VPS_STATUS_KEY, GMAIL_USER, GMAIL_APP_PASSWORD, TECHNICAL_SERVICE_URL, OPENAI_API_KEY };
+const AGENTS = buildAgents(ENV);
+
+const SYMBOL_KEYWORDS = {
+  XAUUSD: ['gold', 'xau', 'सोना'],
+  BTCUSD: ['bitcoin', 'btc', 'बिटकॉइन'],
+  EURUSD: ['eur/usd', 'eur usd', 'euro', 'यूरो']
+};
+
+function detectSymbol(text) {
+  const lower = text.toLowerCase();
+  for (const [symbol, keywords] of Object.entries(SYMBOL_KEYWORDS)) {
+    if (keywords.some(k => lower.includes(k))) return symbol;
+  }
+  return null;
+}
+
+function isTradePlanRequest(text) {
+  const lower = text.toLowerCase();
+  return /trade plan|trading plan|buy|sell|support|resistance|analysis|प्लान|खरीद|बेच/.test(lower);
+}
 
 function requireAuth(req, res, next) {
   if (req.session && req.session.authenticated) {
@@ -97,10 +122,23 @@ app.post('/api/chat', requireAuth, async (req, res) => {
           : 'Gmail inbox: no unread emails.')
       : 'Gmail data is not available right now.';
 
+    let tradePlanText = '';
+    const symbol = detectSymbol(userText);
+    if (symbol && isTradePlanRequest(userText)) {
+      const [news, technical] = await Promise.all([
+        getForexFactoryNews(),
+        getTechnicalAnalysis(ENV, symbol)
+      ]);
+      const plan = await buildTradePlan(ENV, { symbol, news, technical });
+      tradePlanText = plan.available
+        ? `Trade plan for ${symbol} — action: ${plan.data.action}, confidence: ${plan.data.confidence}, support: ${plan.data.support}, resistance: ${plan.data.resistance}. Reasoning: ${plan.data.reasoning}`
+        : `A trade plan for ${symbol} was requested but is not available right now (${plan.reason}). Tell the user honestly that trading data isn't available, don't make up a plan.`;
+    }
+
     const systemInstruction =
       "You are DeepSea, a calm and confident AI assistant helping run a personal trading and automation system. " +
       "Always reply in Hindi (Devanagari script), even if the user speaks in English or Hinglish. " +
-      `${statusText} ${gmailText} Use this real data to answer questions about balance, equity, open trades, or email accurately — never guess or make up numbers or email content. ` +
+      `${statusText} ${gmailText}${tradePlanText ? ' ' + tradePlanText : ''} Use this real data to answer questions about balance, equity, open trades, email, or trade plans accurately — never guess or make up numbers, email content, or trading levels. ` +
       "Keep replies short (1-3 sentences), spoken-friendly, and to the point. Never use markdown formatting, asterisks, or bullet points, since your reply is read aloud.";
 
     const response = await fetch(
