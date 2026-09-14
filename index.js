@@ -48,6 +48,11 @@ function isTradePlanRequest(text) {
   return /trade plan|trading plan|buy|sell|support|resistance|analysis|प्लान|खरीद|बेच/.test(lower);
 }
 
+function isEmailRequest(text) {
+  const lower = text.toLowerCase();
+  return /email|mail|gmail|inbox|इनबॉक्स|मेल|ईमेल/.test(lower);
+}
+
 function requireAuth(req, res, next) {
   if (req.session && req.session.authenticated) {
     return next();
@@ -108,21 +113,17 @@ app.post('/api/chat', requireAuth, async (req, res) => {
   }
 
   try {
-    const agents = await checkAllAgents(AGENTS);
-    const mt5 = agents.find(a => a.id === 'mt5');
-    const gmail = agents.find(a => a.id === 'gmail');
+    let contextText = '';
 
-    const statusText = mt5.connected
-      ? `Current live MT5 account data — Balance: ${mt5.data.balance}, Equity: ${mt5.data.equity}, Open Trades: ${mt5.data.openTrades}.`
-      : 'Live MT5 account data is not available right now.';
+    if (isEmailRequest(userText)) {
+      const [gmail] = await checkAllAgents(AGENTS.filter(a => a.id === 'gmail'));
+      contextText += gmail.connected
+        ? (gmail.data.unreadCount > 0
+            ? ` Gmail inbox: ${gmail.data.unreadCount} unread email(s). Most recent unread is from ${gmail.data.latest.from}, subject: "${gmail.data.latest.subject}". Use this real data — never guess or make up email content.`
+            : ' Gmail inbox: no unread emails.')
+        : ' Gmail data is not available right now — tell the user honestly instead of guessing.';
+    }
 
-    const gmailText = gmail.connected
-      ? (gmail.data.unreadCount > 0
-          ? `Gmail inbox: ${gmail.data.unreadCount} unread email(s). Most recent unread is from ${gmail.data.latest.from}, subject: "${gmail.data.latest.subject}".`
-          : 'Gmail inbox: no unread emails.')
-      : 'Gmail data is not available right now.';
-
-    let tradePlanText = '';
     const symbol = detectSymbol(userText);
     if (symbol && isTradePlanRequest(userText)) {
       const [news, technical] = await Promise.all([
@@ -130,15 +131,17 @@ app.post('/api/chat', requireAuth, async (req, res) => {
         getTechnicalAnalysis(ENV, symbol)
       ]);
       const plan = await buildTradePlan(ENV, { symbol, news, technical });
-      tradePlanText = plan.available
-        ? `Trade plan for ${symbol} — action: ${plan.data.action}, confidence: ${plan.data.confidence}, entry: ${plan.data.entry}, stop-loss: ${plan.data.stopLoss}, take-profit: ${plan.data.takeProfit}, support: ${plan.data.support}, resistance: ${plan.data.resistance}. Reasoning: ${plan.data.reasoning}. The user trades manually, so clearly state the action, entry, stop-loss, and take-profit levels — they will place the trade themselves.`
-        : `A trade plan for ${symbol} was requested but is not available right now (${plan.reason}). Tell the user honestly that trading data isn't available, don't make up a plan.`;
+      contextText += plan.available
+        ? ` Trade plan for ${symbol} — action: ${plan.data.action}, confidence: ${plan.data.confidence}, entry: ${plan.data.entry}, stop-loss: ${plan.data.stopLoss}, take-profit: ${plan.data.takeProfit}, support: ${plan.data.support}, resistance: ${plan.data.resistance}. Reasoning: ${plan.data.reasoning}. The user trades manually, so clearly state the action, entry, stop-loss, and take-profit levels — they will place the trade themselves. Never guess or make up trading levels.`
+        : ` A trade plan for ${symbol} was requested but is not available right now (${plan.reason}). Tell the user honestly that trading data isn't available, don't make up a plan.`;
     }
 
     const systemInstruction =
       "You are DeepSea, a calm and confident AI assistant helping run a personal trading and automation system. " +
+      "You do not manage or discuss the user's MT5 trading account — they trade manually and handle MT5 themselves, so never bring up MT5, balance, equity, or positions unless the user explicitly asks about MT5. " +
       "Always reply in Hindi (Devanagari script), even if the user speaks in English or Hinglish. " +
-      `${statusText} ${gmailText}${tradePlanText ? ' ' + tradePlanText : ''} Use this real data to answer questions about balance, equity, open trades, email, or trade plans accurately — never guess or make up numbers, email content, or trading levels. ` +
+      `${contextText} ` +
+      "Only talk about topics the user actually asked about — don't mix in unrelated data. " +
       "Keep replies short (1-3 sentences), spoken-friendly, and to the point. Never use markdown formatting, asterisks, or bullet points, since your reply is read aloud.";
 
     const response = await fetch(
