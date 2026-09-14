@@ -7,10 +7,46 @@ const RAPIDAPI_HOST = 'forex-factory-news.p.rapidapi.com';
 const BROWSER_USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
-// Scrapes the forexfactory.com/news page directly (the page the user
-// actually looks at), rather than relying on a third-party API. Matches
-// on the /news/<id>-<slug> link pattern rather than specific CSS classes
-// so it's a little more resilient to the site's markup changing.
+const CACHE_TTL_SUCCESS_MS = 10 * 60 * 1000; // 10 minutes
+const CACHE_TTL_FAILURE_MS = 2 * 60 * 1000; // retry sooner after a failure
+let cache = { at: 0, result: null };
+
+// Free, keyless economic calendar feed — the primary source, since it has
+// worked reliably in practice (unlike forexfactory.com's own site, which
+// blocks requests from cloud/datacenter IPs the same way Yahoo Finance does).
+async function getFromPublicCalendar() {
+  try {
+    const res = await fetch(FF_CALENDAR_URL, {
+      signal: AbortSignal.timeout(8000),
+      headers: { 'User-Agent': BROWSER_USER_AGENT }
+    });
+    if (!res.ok) {
+      console.error(`Forex Factory public calendar fetch failed: http ${res.status}`);
+      return { available: false, reason: `http ${res.status}` };
+    }
+    const events = await res.json();
+    if (!Array.isArray(events)) return { available: false, reason: 'unexpected response shape' };
+
+    const highImpact = events
+      .filter(e => e && String(e.impact).toLowerCase() === 'high')
+      .map(e => ({
+        title: e.title || '(untitled)',
+        country: e.country || '',
+        forecast: e.forecast || null,
+        previous: e.previous || null
+      }));
+
+    return { available: true, data: highImpact };
+  } catch (err) {
+    console.error('Forex Factory public calendar fetch failed:', err.message);
+    return { available: false, reason: err.message };
+  }
+}
+
+// Best-effort direct scrape of the page the user actually looks at. Render's
+// datacenter IP gets a 403 from forexfactory.com's own bot protection as of
+// this writing, so this is kept only as a secondary attempt in case that
+// ever changes, not relied on.
 async function getFromForexFactoryPage() {
   try {
     const res = await fetch(FF_NEWS_PAGE, {
@@ -48,35 +84,8 @@ async function getFromForexFactoryPage() {
   }
 }
 
-async function getFromPublicCalendar() {
-  try {
-    const res = await fetch(FF_CALENDAR_URL, {
-      signal: AbortSignal.timeout(8000),
-      headers: { 'User-Agent': BROWSER_USER_AGENT }
-    });
-    if (!res.ok) {
-      console.error(`Forex Factory public calendar fetch failed: http ${res.status}`);
-      return { available: false, reason: `http ${res.status}` };
-    }
-    const events = await res.json();
-    if (!Array.isArray(events)) return { available: false, reason: 'unexpected response shape' };
-
-    const highImpact = events
-      .filter(e => e && String(e.impact).toLowerCase() === 'high')
-      .map(e => ({
-        title: e.title || '(untitled)',
-        country: e.country || '',
-        forecast: e.forecast || null,
-        previous: e.previous || null
-      }));
-
-    return { available: true, data: highImpact };
-  } catch (err) {
-    console.error('Forex Factory public calendar fetch failed:', err.message);
-    return { available: false, reason: err.message };
-  }
-}
-
+// Kept for when the correct RapidAPI endpoint path is confirmed — every
+// guessed path has 404'd so far, so this rarely succeeds today.
 async function getFromRapidApi(rapidApiKey) {
   try {
     const res = await fetch(`https://${RAPIDAPI_HOST}/news`, {
@@ -116,10 +125,10 @@ async function getFromRapidApi(rapidApiKey) {
   }
 }
 
-// Try the direct page scrape first (matches what the user sees), fall back
-// to RapidAPI if a key is configured and the page scrape fails, then to
-// the free public calendar feed as a last resort.
-async function getForexFactoryNews(env) {
+async function fetchForexFactoryNews(env) {
+  const calendar = await getFromPublicCalendar();
+  if (calendar.available) return calendar;
+
   const page = await getFromForexFactoryPage();
   if (page.available) return page;
 
@@ -128,7 +137,21 @@ async function getForexFactoryNews(env) {
     if (rapid.available) return rapid;
   }
 
-  return getFromPublicCalendar();
+  return calendar; // return the (unavailable) calendar result — carries the most useful `reason`
+}
+
+// The dashboard polls /api/status every 15s, and each trade-plan request
+// also calls this — without caching that hammers these external services
+// often enough to get us rate-limited. Cache the outcome for a few minutes.
+async function getForexFactoryNews(env) {
+  const now = Date.now();
+  const ttl = cache.result && cache.result.available ? CACHE_TTL_SUCCESS_MS : CACHE_TTL_FAILURE_MS;
+  if (cache.result && now - cache.at < ttl) {
+    return cache.result;
+  }
+  const result = await fetchForexFactoryNews(env);
+  cache = { at: now, result };
+  return result;
 }
 
 module.exports = { getForexFactoryNews };
