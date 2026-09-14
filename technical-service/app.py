@@ -8,25 +8,26 @@ from fastapi import FastAPI, HTTPException
 
 app = FastAPI(title="DeepSea Technical Analysis Service")
 
-# Both Yahoo Finance and Stooq started serving bot-check/JS-challenge pages
-# to Render's IP instead of real data — a pattern consumer-facing sites
-# increasingly apply to cloud/datacenter IPs. Alpha Vantage is a real API
-# built for programmatic access, so it doesn't do that, but its free tier
-# is capped at 25 requests/day — everything here is built around that.
-ALPHA_VANTAGE_KEY = os.environ.get("ALPHA_VANTAGE_KEY", "")
-ALPHA_VANTAGE_URL = "https://www.alphavantage.co/query"
+# Alpha Vantage's free tier caps at 25 requests/day, which live polling
+# traffic exhausted within a couple of hours. Twelve Data's free tier allows
+# 800 requests/day (8/min), giving enough headroom for continuous polling
+# across all 3 symbols.
+TWELVE_DATA_KEY = os.environ.get("TWELVE_DATA_API_KEY", "")
+TWELVE_DATA_URL = "https://api.twelvedata.com/time_series"
 
-# 3 symbols, 25 requests/day total: a long cache is required, not optional.
-CACHE_TTL_SECONDS = 6 * 60 * 60  # 6 hours -> at most 12 calls/day across all 3 symbols
+SYMBOL_MAP = {
+    "XAUUSD": "XAU/USD",
+    "BTCUSD": "BTC/USD",
+    "EURUSD": "EUR/USD",
+}
+
+# Cache successes for a while to stay well under the rate limit, but also
+# cache failures (briefly) so a rate-limit or outage window doesn't turn
+# every dashboard poll into another outbound call while waiting for it to
+# clear.
+CACHE_TTL_SUCCESS_SECONDS = 15 * 60
+CACHE_TTL_FAILURE_SECONDS = 2 * 60
 _cache = {}
-
-FX_SYMBOLS = {
-    "XAUUSD": ("XAU", "USD"),
-    "EURUSD": ("EUR", "USD"),
-}
-CRYPTO_SYMBOLS = {
-    "BTCUSD": ("BTC", "USD"),
-}
 
 
 def ema(series: pd.Series, span: int) -> pd.Series:
@@ -55,103 +56,64 @@ def window_bias(close: pd.Series, window: int) -> str:
     return "flat"
 
 
-def check_alpha_vantage_error(data: dict):
-    if "Note" in data:
-        raise HTTPException(status_code=429, detail=f"Alpha Vantage rate limit: {data['Note']}")
-    if "Information" in data:
-        raise HTTPException(status_code=429, detail=f"Alpha Vantage: {data['Information']}")
-    if "Error Message" in data:
-        raise HTTPException(status_code=502, detail=f"Alpha Vantage error: {data['Error Message']}")
-
-
-def fetch_fx_daily(from_symbol: str, to_symbol: str) -> pd.DataFrame:
-    resp = requests.get(
-        ALPHA_VANTAGE_URL,
-        params={
-            "function": "FX_DAILY",
-            "from_symbol": from_symbol,
-            "to_symbol": to_symbol,
-            "outputsize": "compact",
-            "apikey": ALPHA_VANTAGE_KEY,
-        },
-        timeout=15,
-    )
-    resp.raise_for_status()
-    data = resp.json()
-    check_alpha_vantage_error(data)
-
-    series = data.get("Time Series FX (Daily)")
-    if not series:
-        raise HTTPException(status_code=502, detail=f"Unexpected Alpha Vantage response: {str(data)[:300]}")
-
-    rows = []
-    for date_str, ohlc in sorted(series.items()):
-        rows.append({
-            "Date": date_str,
-            "Open": float(ohlc["1. open"]),
-            "High": float(ohlc["2. high"]),
-            "Low": float(ohlc["3. low"]),
-            "Close": float(ohlc["4. close"]),
-        })
-    return pd.DataFrame(rows)
-
-
-def fetch_crypto_daily(symbol: str, market: str) -> pd.DataFrame:
-    resp = requests.get(
-        ALPHA_VANTAGE_URL,
-        params={
-            "function": "DIGITAL_CURRENCY_DAILY",
-            "symbol": symbol,
-            "market": market,
-            "apikey": ALPHA_VANTAGE_KEY,
-        },
-        timeout=15,
-    )
-    resp.raise_for_status()
-    data = resp.json()
-    check_alpha_vantage_error(data)
-
-    series = data.get("Time Series (Digital Currency Daily)")
-    if not series:
-        raise HTTPException(status_code=502, detail=f"Unexpected Alpha Vantage response: {str(data)[:300]}")
-
-    rows = []
-    for date_str, ohlc in sorted(series.items()):
-        # Alpha Vantage has changed this endpoint's key naming over time;
-        # accept either style rather than breaking on the next change.
-        open_v = ohlc.get("1a. open (USD)") or ohlc.get("1. open")
-        high_v = ohlc.get("2a. high (USD)") or ohlc.get("2. high")
-        low_v = ohlc.get("3a. low (USD)") or ohlc.get("3. low")
-        close_v = ohlc.get("4a. close (USD)") or ohlc.get("4. close")
-        if close_v is None:
-            continue
-        rows.append({
-            "Date": date_str,
-            "Open": float(open_v),
-            "High": float(high_v),
-            "Low": float(low_v),
-            "Close": float(close_v),
-        })
-    return pd.DataFrame(rows)
-
-
 def fetch_daily_ohlc(symbol: str) -> pd.DataFrame:
-    if symbol in FX_SYMBOLS:
-        from_symbol, to_symbol = FX_SYMBOLS[symbol]
-        return fetch_fx_daily(from_symbol, to_symbol)
-    if symbol in CRYPTO_SYMBOLS:
-        av_symbol, market = CRYPTO_SYMBOLS[symbol]
-        return fetch_crypto_daily(av_symbol, market)
-    raise HTTPException(status_code=400, detail=f"Unsupported symbol: {symbol}")
+    td_symbol = SYMBOL_MAP[symbol]
+    resp = requests.get(
+        TWELVE_DATA_URL,
+        params={
+            "symbol": td_symbol,
+            "interval": "1day",
+            "outputsize": 100,
+            "apikey": TWELVE_DATA_KEY,
+        },
+        timeout=15,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+
+    if isinstance(data, dict) and data.get("status") == "error":
+        code = data.get("code")
+        status_code = code if isinstance(code, int) and 400 <= code < 600 else 502
+        raise HTTPException(status_code=status_code, detail=f"Twelve Data error: {data.get('message', 'unknown error')}")
+
+    values = data.get("values") if isinstance(data, dict) else None
+    if not values:
+        raise HTTPException(status_code=502, detail=f"Unexpected Twelve Data response: {str(data)[:300]}")
+
+    rows = [
+        {
+            "Date": v["datetime"],
+            "Open": float(v["open"]),
+            "High": float(v["high"]),
+            "Low": float(v["low"]),
+            "Close": float(v["close"]),
+        }
+        for v in values
+    ]
+    return pd.DataFrame(rows).sort_values("Date").reset_index(drop=True)
 
 
 def get_cached_ohlc(symbol: str) -> pd.DataFrame:
     now = time.time()
     entry = _cache.get(symbol)
-    if entry and now - entry["at"] < CACHE_TTL_SECONDS:
-        return entry["data"]
-    data = fetch_daily_ohlc(symbol)
-    _cache[symbol] = {"at": now, "data": data}
+    if entry:
+        ttl = CACHE_TTL_SUCCESS_SECONDS if entry["ok"] else CACHE_TTL_FAILURE_SECONDS
+        if now - entry["at"] < ttl:
+            if entry["ok"]:
+                return entry["data"]
+            raise entry["error"]
+
+    try:
+        data = fetch_daily_ohlc(symbol)
+    except HTTPException as exc:
+        _cache[symbol] = {"at": now, "ok": False, "error": exc}
+        raise
+    except Exception as exc:
+        wrapped = HTTPException(status_code=502, detail=f"Market data fetch failed: {exc}")
+        _cache[symbol] = {"at": now, "ok": False, "error": wrapped}
+        raise wrapped
+
+    _cache[symbol] = {"at": now, "ok": True, "data": data}
     return data
 
 
@@ -163,17 +125,12 @@ def health():
 @app.get("/analyze")
 def analyze(symbol: str):
     symbol = symbol.upper()
-    if not ALPHA_VANTAGE_KEY:
-        raise HTTPException(status_code=500, detail="ALPHA_VANTAGE_KEY not configured")
-    if symbol not in FX_SYMBOLS and symbol not in CRYPTO_SYMBOLS:
-        raise HTTPException(status_code=400, detail=f"Unsupported symbol: {symbol}")
+    if not TWELVE_DATA_KEY:
+        raise HTTPException(status_code=500, detail="TWELVE_DATA_API_KEY not configured")
+    if symbol not in SYMBOL_MAP:
+        raise HTTPException(status_code=400, detail=f"Unsupported symbol: {symbol}. Supported: {list(SYMBOL_MAP)}")
 
-    try:
-        data = get_cached_ohlc(symbol)
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Market data fetch failed: {exc}")
+    data = get_cached_ohlc(symbol)
 
     if data.empty or "Close" not in data.columns or len(data) < 2:
         raise HTTPException(status_code=502, detail="Not enough market data returned")

@@ -21,3 +21,16 @@ services:
         sync: false
       - key: GMAIL_APP_PASSWORD
         sync: false
+      - key: TECHNICAL_SERVICE_URL
+        sync: false
+
+  - type: web
+    name: deepsea-technical-service
+    runtime: python
+    plan: free
+    buildCommand: cd technical-service && pip install -r requirements.txt
+    startCommand: cd technical-service && uvicorn app:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: TWELVE_DATA_API_KEY
+        sync: false
