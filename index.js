@@ -99,6 +99,25 @@ app.get('/', requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, 'dashboard.html'));
 });
 
+app.get('/api/status', requireAuth, async (req, res) => {
+  const [mt5Status, gmailStatus] = await Promise.all([getMT5Status(), getGmailStatus()]);
+
+  res.json({
+    mt5: mt5Status
+      ? {
+          connected: true,
+          balance: mt5Status.balance,
+          equity: mt5Status.equity,
+          openTrades: mt5Status.openTrades,
+          profit: typeof mt5Status.profit === 'number' ? mt5Status.profit : null
+        }
+      : { connected: false },
+    gmail: gmailStatus
+      ? { connected: true, unreadCount: gmailStatus.unreadCount, latest: gmailStatus.latest }
+      : { connected: false }
+  });
+});
+
 app.post('/api/chat', requireAuth, async (req, res) => {
   const userText = (req.body && req.body.text) || '';
   if (!userText.trim()) {
