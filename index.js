@@ -53,7 +53,7 @@ async function getGmailStatus() {
     await client.logout();
     return { unreadCount, latest };
   } catch (err) {
-    console.error('Gmail check failed:', err.message);
+    console.error('Gmail check failed:', err.responseText || err.message);
     try { await client.logout(); } catch (e) {}
     return null;
   }
