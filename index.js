@@ -82,6 +82,10 @@ app.get('/', requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, 'dashboard.html'));
 });
 
+app.get('/trading', requireAuth, (req, res) => {
+  res.sendFile(path.join(__dirname, 'trading.html'));
+});
+
 app.get('/api/status', requireAuth, async (req, res) => {
   const agents = await checkAllAgents(AGENTS);
   const mt5 = agents.find(a => a.id === 'mt5');
@@ -102,6 +106,35 @@ app.get('/api/status', requireAuth, async (req, res) => {
       ? { connected: true, unreadCount: gmail.data.unreadCount, latest: gmail.data.latest }
       : { connected: false }
   });
+});
+
+app.get('/api/nexus', requireAuth, async (req, res) => {
+  const symbol = (req.query.symbol || 'XAUUSD').toUpperCase();
+  if (!SYMBOL_KEYWORDS[symbol]) {
+    return res.status(400).json({ error: `Unsupported symbol: ${symbol}` });
+  }
+
+  try {
+    const [news, technical] = await Promise.all([
+      getForexFactoryNews(ENV),
+      getTechnicalAnalysis(ENV, symbol)
+    ]);
+
+    let plan = { available: false, reason: 'not requested' };
+    if (technical.available) {
+      plan = await buildTradePlan(ENV, { symbol, news, technical });
+    }
+
+    res.json({
+      symbol,
+      technical,
+      news,
+      plan
+    });
+  } catch (err) {
+    console.error('Nexus data error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
 app.post('/api/chat', requireAuth, async (req, res) => {
