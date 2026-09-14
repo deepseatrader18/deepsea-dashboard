@@ -1,9 +1,14 @@
 function summarizeNews(news) {
   if (!news.available) return `News data not available (${news.reason}).`;
-  if (!news.data.length) return 'No major high-impact news scheduled this week.';
+  if (!news.data.length) return 'No recent relevant news found.';
   return news.data
     .slice(0, 5)
-    .map(n => `${n.country} — ${n.title} (forecast: ${n.forecast ?? 'n/a'}, previous: ${n.previous ?? 'n/a'})`)
+    .map(n => {
+      if (n.country !== undefined) {
+        return `${n.country} — ${n.title} (forecast: ${n.forecast ?? 'n/a'}, previous: ${n.previous ?? 'n/a'})`;
+      }
+      return `${n.title}${n.summary ? ' — ' + n.summary : ''}`;
+    })
     .join('\n');
 }
 

@@ -76,9 +76,9 @@ function buildAgents(env) {
       id: 'news',
       name: 'News Agent (Forex Factory)',
       async check() {
-        const result = await getForexFactoryNews();
+        const result = await getForexFactoryNews(env);
         return result.available
-          ? { connected: true, data: { highImpactCount: result.data.length } }
+          ? { connected: true, data: { storyCount: result.data.length } }
           : { connected: false, reason: result.reason };
       }
     },
