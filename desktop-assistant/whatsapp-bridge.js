@@ -37,6 +37,8 @@ client.on('auth_failure', msg => console.error('WhatsApp auth failed:', msg));
 client.on('disconnected', reason => console.error('WhatsApp disconnected:', reason));
 
 client.on('message_create', async msg => {
+  console.log(`[debug] message_create: fromMe=${msg.fromMe} from=${msg.from} to=${msg.to} body="${msg.body}"`);
+
   // Only react to messages you send yourself (fromMe) into the allowed
   // chat, so no one else — in any other chat, including ones that message
   // you — can trigger it, and it never replies to messages other people
@@ -45,10 +47,16 @@ client.on('message_create', async msg => {
 
   const chatId = msg.to;
   const isAllowedChat = ALLOWED_CHAT_ID ? chatId === ALLOWED_CHAT_ID : msg.from === msg.to;
-  if (!isAllowedChat) return;
+  if (!isAllowedChat) {
+    console.log(`[debug] chat not allowed (expected ${ALLOWED_CHAT_ID || 'from===to'}, got from=${msg.from} to=${msg.to}) — skipping`);
+    return;
+  }
 
   const body = (msg.body || '').trim();
-  if (!body.toLowerCase().startsWith(WAKE_WORD)) return;
+  if (!body.toLowerCase().startsWith(WAKE_WORD)) {
+    console.log(`[debug] no wake word "${WAKE_WORD}" — skipping`);
+    return;
+  }
   const commandText = body.slice(WAKE_WORD.length).trim() || body;
 
   console.log(`-> Command: ${commandText}`);
