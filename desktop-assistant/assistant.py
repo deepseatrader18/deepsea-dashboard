@@ -166,6 +166,14 @@ def _resolve_lock(text, lower):
     return None
 
 
+def _resolve_sleep(text, lower):
+    if re.search(r'\bsleep\s*mode\b|\bsleep karo\b|\bso jao\b|\bsulao\b', lower):
+        # SetSuspendState(hibernate, force, disable_wake_event) — False for
+        # hibernate means Sleep/Suspend, not Hibernate.
+        return 'laptop sleep mode mein daalna', lambda: ctypes.windll.powrprof.SetSuspendState(False, True, False)
+    return None
+
+
 def _resolve_media(text, lower):
     if re.search(r'\bvolume\s*(up|badhao|increase)\b', lower):
         return 'volume badhana', lambda: pyautogui.press('volumeup', presses=5)
@@ -257,6 +265,7 @@ COMMAND_RESOLVERS = [
     _resolve_click,
     _resolve_screenshot,
     _resolve_lock,
+    _resolve_sleep,
     _resolve_media,
     _resolve_scroll,
     _resolve_close_window,
