@@ -23,6 +23,7 @@ app.use(session({
 
 const MASTER_PASSWORD = process.env.MASTER_PASSWORD;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const VPS_STATUS_URL = process.env.VPS_STATUS_URL;
 const VPS_STATUS_KEY = process.env.VPS_STATUS_KEY;
 const GMAIL_USER = process.env.GMAIL_USER;
@@ -285,8 +286,8 @@ app.get('/api/deep-analysis/:jobId', requireAuth, async (req, res) => {
 // persona and real trade-plan/Gmail context instead of two copies drifting
 // apart. `channel` only tweaks the one line about how the reply is consumed.
 async function buildDeepSeaReply(userText, channel = 'voice') {
-  if (!GEMINI_API_KEY) {
-    throw new Error('GEMINI_API_KEY not set on server');
+  if (!GROQ_API_KEY) {
+    throw new Error('GROQ_API_KEY not set on server');
   }
 
   let contextText = '';
@@ -324,14 +325,24 @@ async function buildDeepSeaReply(userText, channel = 'voice') {
     "Only talk about topics the user actually asked about — don't mix in unrelated data. " +
     outputLine;
 
+  // Groq (OpenAI-compatible endpoint) instead of Gemini — Gemini's free
+  // tier caps out at ~20 requests/day per model, which real daily use blew
+  // through repeatedly; Groq's free tier is far more generous and doesn't
+  // require billing to be added.
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${GEMINI_API_KEY}`,
+    'https://api.groq.com/openai/v1/chat/completions',
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${GROQ_API_KEY}`
+      },
       body: JSON.stringify({
-        system_instruction: { parts: [{ text: systemInstruction }] },
-        contents: [{ role: 'user', parts: [{ text: userText }] }]
+        model: 'llama-3.3-70b-versatile',
+        messages: [
+          { role: 'system', content: systemInstruction },
+          { role: 'user', content: userText }
+        ]
       })
     }
   );
@@ -339,17 +350,15 @@ async function buildDeepSeaReply(userText, channel = 'voice') {
   const data = await response.json();
 
   if (!response.ok) {
-    console.error('Gemini API error:', JSON.stringify(data));
-    throw new Error('Gemini API error');
+    console.error('Groq API error:', JSON.stringify(data));
+    throw new Error('Groq API error');
   }
 
   return (
-    (data.candidates &&
-      data.candidates[0] &&
-      data.candidates[0].content &&
-      data.candidates[0].content.parts &&
-      data.candidates[0].content.parts[0] &&
-      data.candidates[0].content.parts[0].text) ||
+    (data.choices &&
+      data.choices[0] &&
+      data.choices[0].message &&
+      data.choices[0].message.content) ||
     "Sorry, I didn't catch that."
   );
 }
