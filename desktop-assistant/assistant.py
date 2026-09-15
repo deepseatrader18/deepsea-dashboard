@@ -203,6 +203,44 @@ def _resolve_app(text, lower):
     return None
 
 
+# Matches "gana/song/music" plus "sunao/bajao/chalao" in either order, so it
+# catches "gana sunao", "youtube par koi gana bajao", "sunao gana", etc.
+_SONG_TRIGGER_RE = re.compile(
+    r'\b(gana|gaana|song|music)\b.*\b(sunao|bajao|chalao|play)\b'
+    r'|\b(sunao|bajao|chalao|play)\b.*\b(gana|gaana|song|music)\b'
+)
+# Stripped out before the remaining words become the search query — request
+# scaffolding, not part of the song name.
+_SONG_FILLER_WORDS = {
+    'deepsea', 'youtube', 'par', 'pe', 'pr', 'per', 'gana', 'gaana', 'song',
+    'music', 'sunao', 'bajao', 'chalao', 'play', 'karo', 'mujhe', 'koi',
+    'ek', 'thoda', 'zara', 'jara', 'please', 'abb', 'ab', 'now',
+}
+
+
+def _resolve_play_song(text, lower):
+    """"Gana/song sunao" doesn't just open youtube.com — it searches
+    YouTube for the requested song (or a generic one if none was named)
+    and opens the first result directly, so it actually starts playing."""
+    if not _SONG_TRIGGER_RE.search(lower):
+        return None
+
+    words = [w for w in re.findall(r"[a-zA-Z']+|[ऀ-ॿ]+", text) if w.lower() not in _SONG_FILLER_WORDS]
+    query = ' '.join(words).strip()
+    search_query = query or 'trending bollywood songs'
+
+    def action():
+        from youtube_search import YoutubeSearch
+
+        results = YoutubeSearch(search_query, max_results=1).to_dict()
+        if not results:
+            raise RuntimeError(f'"{search_query}" ke liye koi video nahi mila')
+        webbrowser.open(f'https://www.youtube.com/watch?v={results[0]["id"]}')
+
+    description = f'YouTube par "{search_query}" chalana' if query else 'YouTube par ek gana chalana'
+    return description, action
+
+
 def _resolve_site(text, lower):
     for pattern, url in SITE_COMMANDS.items():
         if re.search(pattern, lower):
@@ -221,6 +259,7 @@ COMMAND_RESOLVERS = [
     _resolve_scroll,
     _resolve_close_window,
     _resolve_app,
+    _resolve_play_song,
     _resolve_site,
 ]
 

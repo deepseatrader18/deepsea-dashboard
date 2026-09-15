@@ -12,3 +12,6 @@ sounddevice==0.4.6
 edge-tts==6.1.19
 playsound==1.2.2
 python-dotenv==1.0.1
+# Scrapes YouTube search results (no API key) so "gana sunao" can open an
+# actual matching video instead of just youtube.com's homepage.
+youtube-search==2.1.2
