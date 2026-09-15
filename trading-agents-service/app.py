@@ -1,6 +1,8 @@
+import logging
 import os
 import threading
 import time
+import traceback
 import uuid
 from datetime import datetime, timezone
 
@@ -8,6 +10,9 @@ from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel
 
 from tradingagents.graph.trading_graph import TradingAgentsGraph
+
+logger = logging.getLogger("trading-agents-service")
+logging.basicConfig(level=logging.INFO)
 from tradingagents.default_config import DEFAULT_CONFIG
 
 app = FastAPI(title="DeepSea TradingAgents Service")
@@ -216,6 +221,7 @@ def _run_job(job_id: str) -> None:
         except Exception as exc:  # noqa: BLE001 - surface any failure to the caller
             job["status"] = "failed"
             job["error"] = str(exc)
+            logger.error("Job %s failed: %s\n%s", job_id, exc, traceback.format_exc())
         finally:
             job["finished_at"] = time.time()
 
