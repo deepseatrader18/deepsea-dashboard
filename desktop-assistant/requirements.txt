@@ -9,7 +9,10 @@ numpy
 sounddevice==0.4.6
 # Free, unlimited, no API key — Microsoft Edge's neural TTS. Replaced
 # ElevenLabs because its free tier blocks all voices via the API.
-edge-tts==6.1.19
+# Unpinned: Microsoft periodically changes the auth token this library
+# sends, which breaks older pinned versions with a 403 until the library
+# is updated to match — always installing the latest avoids that.
+edge-tts
 playsound==1.2.2
 python-dotenv==1.0.1
 # Scrapes YouTube search results (no API key) so "gana sunao" can open an
