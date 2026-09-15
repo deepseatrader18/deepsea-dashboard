@@ -21,17 +21,18 @@ let pendingCommand = null;
 // message_create exactly like a real reply from you would — fromMe is
 // true for both. Without this, the bridge would read its own "pakka?"
 // prompt as your answer and immediately cancel the command before you
-// ever get to reply. sendAndTrack() remembers each outgoing message's id
-// so the handler below can recognize and skip them.
-const ownSentIds = new Set();
+// ever get to reply.
+//
+// sendAndTrack() records the exact text it's about to send *before*
+// calling sendMessage(), not after: whatsapp-web.js fires message_create
+// for an outgoing message before its sendMessage() promise resolves, so
+// recording the id afterwards (tried first) lost the race almost every
+// time. Matching on body text sidesteps that entirely.
+const ownSentBodies = new Set();
 async function sendAndTrack(to, text) {
-  const sent = await client.sendMessage(to, text);
-  const id = sent && sent.id && sent.id._serialized;
-  if (id) {
-    ownSentIds.add(id);
-    setTimeout(() => ownSentIds.delete(id), 5 * 60 * 1000);
-  }
-  return sent;
+  ownSentBodies.add(text);
+  setTimeout(() => ownSentBodies.delete(text), 5 * 60 * 1000);
+  return client.sendMessage(to, text);
 }
 
 if (!BRIDGE_TOKEN) {
@@ -66,9 +67,10 @@ client.on('disconnected', reason => console.error('WhatsApp disconnected:', reas
 client.on('message_create', async msg => {
   console.log(`[debug] message_create: fromMe=${msg.fromMe} from=${msg.from} to=${msg.to} body="${msg.body}"`);
 
-  // Skip messages the bridge itself just sent (see ownSentIds above) —
+  // Skip messages the bridge itself just sent (see ownSentBodies above) —
   // otherwise its own prompts and replies loop back in as if you'd typed them.
-  if (msg.id && msg.id._serialized && ownSentIds.has(msg.id._serialized)) {
+  if (ownSentBodies.has(msg.body)) {
+    ownSentBodies.delete(msg.body);
     return;
   }
 
