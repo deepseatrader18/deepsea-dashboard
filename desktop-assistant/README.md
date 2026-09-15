@@ -6,6 +6,13 @@
 
 - "DeepSea" बोलने पर जागता है (wake word)
 - बोलकर website खोलना: YouTube, Forex Factory, Gmail, DeepSea dashboard
+- **Apps kholna**: Chrome, Edge, Notepad, Calculator, Paint, File Explorer, Task Manager, Spotify, WhatsApp, VS Code — जैसे "DeepSea, Chrome kholo"
+- **Active window band karna**: "ye band karo" / "close this"
+- **Media control**: volume up/down/mute, play/pause, next/previous track
+- **System actions**: screenshot lena (Desktop पर save होता है), laptop lock करना
+- **Shutdown/Restart**: पूछने पर एक confirmation step है ("haan" बोलना ज़रूरी है) — गलती से mic कुछ गलत सुन ले तो भी laptop बंद ना हो
+- **Typing**: "DeepSea, type karo <jo bhi bolna hai>" — जो भी बोलोगे वो active field में type हो जाएगा
+- **Clicking**: "click karo" / "double click" / "right click" — mouse जहाँ है वहीं click होता है (आवाज़ से किसी specific button पर click नहीं हो सकता, mouse पहले वहाँ ले जाना होगा)
 - "scroll down" / "scroll up" बोलकर current page scroll करना
 
 ## Setup (Windows)
@@ -34,7 +41,8 @@
 
 ## सीमाएं (अभी के लिए)
 
-- सिर्फ ऊपर बताई गई websites खोल सकता है और scroll कर सकता है — कहीं click करना, type करना, या trade लगाना अभी शामिल नहीं है (जानबूझकर, सुरक्षा के लिए — पहले basic चीज़ें भरोसे से चलनी चाहिए)।
+- ऊपर बताए गए fixed commands ही समझता है (jo pehle se list mein hain) — ये कोई general AI agent नहीं है jo "jo bhi bolo wo kar de"; sirf yahan diye gaye specific patterns match karta hai. Kisi bhi naye tarah ke command ke liye code mein naya pattern add karna padega.
+- Kisi specific screen element ko naam se dhoond ke click/type nahi kar sakta (jaise "Save button dabao") — sirf current mouse position par click karta hai, aur jo bolo wahi type karta hai jahan cursor pehle se hai.
 - Microphone आपके laptop का इस्तेमाल होता है, हर बार terminal खुला रखना होगा जब तक चलाना है।
 - Internet चाहिए (आवाज़ को टेक्स्ट में बदलने के लिए Google का free service इस्तेमाल होता है)।
 
