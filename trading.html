@@ -199,6 +199,31 @@
   .trade-log-table tr:last-child td{border-bottom:none;}
   .tl-badge{font-size:9.5px;font-weight:700;letter-spacing:.05em;padding:3px 8px;border-radius:5px;}
 
+  .deep-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;}
+  .deep-run-btn{
+    font-family:'Chakra Petch',sans-serif;font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+    padding:9px 18px;border-radius:9px;border:1px solid rgba(53,199,255,.4);
+    background:var(--accent-soft);color:var(--accent);cursor:pointer;
+  }
+  .deep-run-btn:disabled{opacity:.45;cursor:default;}
+  .deep-meta{display:flex;align-items:center;gap:12px;font-size:11px;color:var(--text-dim);}
+
+  .deep-teams{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;}
+  @media (max-width:980px){.deep-teams{grid-template-columns:1fr 1fr;}}
+  @media (max-width:560px){.deep-teams{grid-template-columns:1fr;}}
+  .deep-team{border:1px solid var(--border-soft);border-radius:10px;padding:10px 11px;background:rgba(0,0,0,.16);}
+  .deep-team-title{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--text-faint);margin-bottom:8px;}
+  .deep-agent{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--text-dim);padding:3px 0;}
+  .deep-agent .ds{width:7px;height:7px;border-radius:50%;flex:none;background:#4c5b78;}
+  .deep-agent.pending .ds{background:#4c5b78;}
+  .deep-agent.in_progress .ds{background:var(--accent);box-shadow:0 0 7px var(--accent);animation:cabinPulse 1.1s ease-in-out infinite;}
+  .deep-agent.completed .ds{background:var(--bull);box-shadow:0 0 6px var(--bull);}
+  .deep-agent.completed{color:var(--text);}
+  .deep-agent.in_progress{color:#eef4ff;}
+
+  .deep-decision{display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap;}
+  .deep-decision .badge{font-family:'Chakra Petch',sans-serif;font-size:13px;font-weight:700;letter-spacing:.05em;padding:6px 14px;border-radius:8px;}
+
   footer{text-align:center;font-size:11px;color:var(--text-faint);padding-top:6px;line-height:1.6;}
   footer b{color:var(--text-dim);}
 
@@ -367,6 +392,27 @@
           <div class="cabin-status-text" id="journalCabinText">Assembling…</div>
         </div>
       </div>
+    </div>
+  </div>
+
+  <div class="row" style="grid-template-columns:1fr;">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-title"><span class="dot" style="background:var(--violet)"></span>Deep Analysis — TradingAgents Desk</div>
+      </div>
+      <div class="deep-head">
+        <button class="deep-run-btn" id="deepRunBtn">Run Deep Analysis</button>
+        <div class="deep-meta">
+          <span class="pill" id="deepStatusPill" style="border-color:var(--border);color:var(--text-dim);">Idle</span>
+          <span class="mono" id="deepElapsed">—</span>
+        </div>
+      </div>
+      <div class="deep-teams" id="deepTeams"></div>
+      <div class="deep-decision" id="deepDecisionRow" style="display:none;">
+        <span class="badge" id="deepDecisionBadge">—</span>
+        <span style="font-size:11px;color:var(--text-faint);">Independent LLM multi-agent second opinion — not a guarantee, cross-check before acting.</span>
+      </div>
+      <div class="reasoning-text" id="deepReportText">Click "Run Deep Analysis" to get TradingAgents' full multi-agent debate on the current symbol. This calls a slower, separate LLM pipeline (not the fast Risk Manager above) and can take a few minutes.</div>
     </div>
   </div>
 
@@ -711,6 +757,144 @@
   document.getElementById('symbolRow').addEventListener('click', e => {
     const btn = e.target.closest('.sym-btn');
     if (btn) switchSymbol(btn.dataset.symbol);
+  });
+
+  // Deep Analysis desk — proxies to trading-agents-service (see
+  // /api/deep-analysis in index.js), which runs the real TradingAgents
+  // multi-agent LLM pipeline and reports real per-agent progress. Slow
+  // (LLM debate rounds) and on-demand only — never auto-triggered.
+  const DEEP_TEAMS = [
+    { title: 'Analyst Team', agents: ['Market Analyst', 'Sentiment Analyst', 'News Analyst', 'Fundamentals Analyst'] },
+    { title: 'Research Team', agents: ['Bull Researcher', 'Bear Researcher', 'Research Manager'] },
+    { title: 'Trading Team', agents: ['Trader'] },
+    { title: 'Risk & Portfolio', agents: ['Aggressive Analyst', 'Neutral Analyst', 'Conservative Analyst', 'Portfolio Manager'] }
+  ];
+  const DEEP_REPORT_PRIORITY = [
+    ['final_trade_decision', 'Portfolio Management Decision'],
+    ['trader_investment_plan', 'Trading Team Plan'],
+    ['investment_plan', 'Research Team Decision'],
+    ['fundamentals_report', 'Fundamentals Analysis'],
+    ['news_report', 'News Analysis'],
+    ['sentiment_report', 'Social Sentiment'],
+    ['market_report', 'Market Analysis']
+  ];
+  let deepPollTimer = null;
+  let deepRunning = false;
+
+  function renderDeepTeams(agentStatus){
+    const wrap = document.getElementById('deepTeams');
+    wrap.innerHTML = '';
+    DEEP_TEAMS.forEach(team => {
+      const box = document.createElement('div');
+      box.className = 'deep-team';
+      const rows = team.agents.map(name => {
+        const status = (agentStatus && agentStatus[name]) || 'pending';
+        return `<div class="deep-agent ${status}"><span class="ds"></span>${name}</div>`;
+      }).join('');
+      box.innerHTML = `<div class="deep-team-title">${team.title}</div>${rows}`;
+      wrap.appendChild(box);
+    });
+  }
+  renderDeepTeams(null);
+
+  function renderDeepReport(job){
+    const box = document.getElementById('deepReportText');
+    const found = DEEP_REPORT_PRIORITY.find(([key]) => job.reports && job.reports[key]);
+    if (found) {
+      const [key, title] = found;
+      box.innerHTML = `<b>${title}</b>\n\n${job.reports[key]}`;
+    } else if (job.status === 'running') {
+      box.textContent = 'Analysts are working — first report will appear here shortly…';
+    } else if (job.status === 'failed') {
+      box.textContent = 'Deep analysis failed: ' + (job.error || 'unknown error');
+    }
+
+    const row = document.getElementById('deepDecisionRow');
+    const badge = document.getElementById('deepDecisionBadge');
+    if (job.final_decision) {
+      row.style.display = 'flex';
+      const text = job.final_decision.toUpperCase();
+      const color = text.includes('BUY') ? { bg: 'rgba(47,219,150,.16)', fg: '#2fdb96' }
+        : text.includes('SELL') ? { bg: 'rgba(255,77,109,.16)', fg: '#ff4d6d' }
+        : { bg: 'rgba(118,136,168,.16)', fg: '#9db0cc' };
+      badge.style.background = color.bg;
+      badge.style.color = color.fg;
+      const match = text.match(/\b(BUY|SELL|HOLD)\b/);
+      badge.textContent = match ? match[1] : 'SEE REPORT';
+    } else {
+      row.style.display = 'none';
+    }
+  }
+
+  function setDeepStatusPill(label, kind){
+    const pill = document.getElementById('deepStatusPill');
+    pill.textContent = label;
+    const styles = {
+      running: 'border-color:rgba(53,199,255,.4);color:var(--accent);background:var(--accent-soft);',
+      completed: 'border-color:rgba(47,219,150,.3);color:var(--bull);background:var(--bull-soft);',
+      failed: 'border-color:rgba(255,77,109,.3);color:var(--bear);background:var(--bear-soft);',
+      idle: 'border-color:var(--border);color:var(--text-dim);background:transparent;'
+    };
+    pill.style.cssText = 'display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;letter-spacing:.06em;padding:5px 10px;border-radius:999px;border:1px solid;text-transform:uppercase;' + (styles[kind] || styles.idle);
+  }
+
+  async function pollDeepAnalysis(jobId){
+    try {
+      const res = await fetch('/api/deep-analysis/' + encodeURIComponent(jobId));
+      const job = await res.json();
+      if (!res.ok) throw new Error(job.error || 'poll failed');
+
+      renderDeepTeams(job.agent_status);
+      renderDeepReport(job);
+      document.getElementById('deepElapsed').textContent = job.elapsed_seconds != null ? job.elapsed_seconds.toFixed(0) + 's' : '—';
+
+      if (job.status === 'completed') {
+        setDeepStatusPill('Completed', 'completed');
+        stopDeepPolling();
+      } else if (job.status === 'failed') {
+        setDeepStatusPill('Failed', 'failed');
+        stopDeepPolling();
+      } else {
+        setDeepStatusPill(job.status === 'running' ? 'Running…' : 'Queued…', 'running');
+      }
+    } catch (err) {
+      console.error('Deep analysis poll error:', err);
+      setDeepStatusPill('Connection error', 'failed');
+      stopDeepPolling();
+    }
+  }
+
+  function stopDeepPolling(){
+    if (deepPollTimer) clearInterval(deepPollTimer);
+    deepPollTimer = null;
+    deepRunning = false;
+    document.getElementById('deepRunBtn').disabled = false;
+  }
+
+  document.getElementById('deepRunBtn').addEventListener('click', async () => {
+    if (deepRunning) return;
+    deepRunning = true;
+    document.getElementById('deepRunBtn').disabled = true;
+    setDeepStatusPill('Starting…', 'running');
+    renderDeepTeams(null);
+    document.getElementById('deepDecisionRow').style.display = 'none';
+    document.getElementById('deepReportText').textContent = 'Starting analysis for ' + currentSymbol + '…';
+    try {
+      const res = await fetch('/api/deep-analysis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symbol: currentSymbol })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'could not start analysis');
+      deepPollTimer = setInterval(() => pollDeepAnalysis(data.job_id), 4000);
+      pollDeepAnalysis(data.job_id);
+    } catch (err) {
+      console.error('Deep analysis start error:', err);
+      setDeepStatusPill('Failed to start', 'failed');
+      document.getElementById('deepReportText').textContent = err.message;
+      stopDeepPolling();
+    }
   });
 
   loadChart(currentSymbol);
