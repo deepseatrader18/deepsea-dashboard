@@ -29,7 +29,7 @@ SCROLL_AMOUNT = 600
 CLAP_ENABLED = os.getenv('CLAP_ENABLED', 'true').lower() != 'false'
 CLAP_SONG_URI = os.getenv('CLAP_SONG_URI', '')
 CLAP_DASHBOARD_URL = os.getenv('CLAP_DASHBOARD_URL', 'https://deepsea-dashboard.onrender.com')
-CLAP_WELCOME_PHRASE = os.getenv('CLAP_WELCOME_PHRASE', 'Welcome back. DeepSea dashboard is ready.')
+CLAP_WELCOME_PHRASE = os.getenv('CLAP_WELCOME_PHRASE', 'Wake up. Welcome home, sir. DeepSea dashboard is ready.')
 CLAP_SPIKE_RATIO = float(os.getenv('CLAP_SPIKE_RATIO', '6.0'))
 CLAP_WINDOW_SECONDS = 0.35
 CLAP_MIN_GAP_SECONDS = 0.05
