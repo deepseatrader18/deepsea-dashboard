@@ -594,6 +594,35 @@
     return WAKE_WORDS.some(w => lower.includes(w.toLowerCase()));
   }
 
+  // DeepSea's brain (Gemini) can only talk — it has no way to actually
+  // control the browser. Without this, it would say "YouTube khol raha hoon"
+  // and do nothing, which is worse than not offering the feature at all.
+  // Handle "open <app>" requests directly in the browser instead of sending
+  // them to Gemini.
+  const APP_LINKS = [
+    { keys: ['youtube', 'यूट्यूब', 'यूटूब', 'यू ट्यूब'], url: 'https://www.youtube.com', name: 'YouTube' },
+    { keys: ['gmail', 'जीमेल', 'जी मेल', 'mail', 'मेल'], url: 'https://mail.google.com', name: 'Gmail' },
+    { keys: ['whatsapp', 'व्हाट्सएप', 'व्हाट्सएप्प', 'वॉट्सऐप', 'वाट्सएप'], url: 'https://web.whatsapp.com', name: 'WhatsApp' },
+    { keys: ['instagram', 'इंस्टाग्राम', 'इंस्टा'], url: 'https://www.instagram.com', name: 'Instagram' }
+  ];
+  const OPEN_WORDS = ['khol', 'खोल', 'open'];
+
+  function tryOpenApp(text){
+    const lower = text.toLowerCase();
+    if (!OPEN_WORDS.some(w => lower.includes(w))) return false;
+    const match = APP_LINKS.find(app => app.keys.some(k => lower.includes(k.toLowerCase())));
+    if (!match) return false;
+
+    // Speech-recognition callbacks aren't treated as a user gesture by most
+    // browsers, so window.open() here can get silently popup-blocked —
+    // always also log a clickable link so there's a guaranteed way to open
+    // it even if the automatic tab didn't appear.
+    window.open(match.url, '_blank');
+    logLine('DEEPSEA', `${match.name} खोल रहा हूँ। अगर नया टैब न खुले तो <a href="${match.url}" target="_blank" style="color:var(--accent, #35c7ff)">यहाँ क्लिक करें</a>।`);
+    speak(`जी, ${match.name} खोल रहा हूँ।`);
+    return true;
+  }
+
   async function sendToDeepSea(command){
     micBtn.classList.remove('idle-listening');
     micBtn.classList.add('listening');
@@ -662,6 +691,7 @@
       if (awaitingCommand) {
         awaitingCommand = false;
         recognition.lang = 'en-IN';
+        if (tryOpenApp(spokenText)) return;
         sendToDeepSea(spokenText);
         return;
       }

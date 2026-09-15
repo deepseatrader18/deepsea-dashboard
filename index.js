@@ -126,6 +126,8 @@ app.get('/api/test-telegram', requireAuth, async (req, res) => {
 // cost. Replaces the browser's robotic built-in speechSynthesis voice for
 // DeepSea's spoken replies.
 const TTS_VOICE = 'hi-IN-SwaraNeural';
+// Default neural rate reads a bit slow for a live assistant — speed it up.
+const TTS_RATE = '+15%';
 
 app.post('/api/speak', requireAuth, async (req, res) => {
   const text = (req.body && req.body.text || '').trim();
@@ -133,7 +135,7 @@ app.post('/api/speak', requireAuth, async (req, res) => {
   try {
     const tts = new MsEdgeTTS();
     await tts.setMetadata(TTS_VOICE, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
-    const { audioStream } = tts.toStream(text);
+    const { audioStream } = tts.toStream(text, { rate: TTS_RATE });
     res.setHeader('Content-Type', 'audio/mpeg');
     audioStream.on('error', err => {
       console.error('TTS stream error:', err.message);
@@ -242,6 +244,7 @@ app.post('/api/chat', requireAuth, async (req, res) => {
       "You are DeepSea, a calm and confident AI assistant helping run a personal trading and automation system. " +
       "You do not manage or discuss the user's MT5 trading account — they trade manually and handle MT5 themselves, so never bring up MT5, balance, equity, or positions unless the user explicitly asks about MT5. " +
       "Always reply in Hindi (Devanagari script), even if the user speaks in English or Hinglish. " +
+      "You cannot open apps, websites, or files, click anything, or control the browser — you can only talk. The dashboard itself already handles opening YouTube, Gmail, WhatsApp, and Instagram directly, without asking you. If the user asks you to open, click, or launch something else you have no way to do, say plainly that you can't do that yourself, instead of pretending you did it. " +
       `${contextText} ` +
       "Only talk about topics the user actually asked about — don't mix in unrelated data. " +
       "Keep replies short (1-3 sentences), spoken-friendly, and to the point. Never use markdown formatting, asterisks, or bullet points, since your reply is read aloud.";
