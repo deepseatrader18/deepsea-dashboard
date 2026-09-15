@@ -1,3 +1,8 @@
-fastapi==0.115.0
-uvicorn==0.30.6
-tradingagents==0.7.0
+fastapi>=0.116.1
+uvicorn>=0.30.6
+# Pinned to the exact commit this service's app.py was built and tested
+# against — the tradingagents PyPI releases (0.4.0 through 0.7.0 as of this
+# writing) have a materially different config/graph API, so installing from
+# PyPI here breaks imports. Bump this only alongside re-verifying app.py
+# against the new API.
+git+https://github.com/TauricResearch/TradingAgents.git@be952b8eccb49720509af544c6675233bc1f10d0
