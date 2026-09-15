@@ -21,13 +21,17 @@ services:
         sync: false
       - key: GMAIL_APP_PASSWORD
         sync: false
-      - key: TECHNICAL_SERVICE_URL
+      - key: TWELVE_DATA_API_KEY
         sync: false
       - key: TELEGRAM_BOT_TOKEN
         sync: false
       - key: TELEGRAM_CHAT_ID
         sync: false
 
+  # deepsea-technical-service is no longer used — technical analysis now
+  # runs in-process inside deepsea-dashboard (see trading/technical.js) to
+  # avoid the free-tier cold-start delay of a separate service. Left here,
+  # unused, rather than deleted from Render.
   - type: web
     name: deepsea-technical-service
     runtime: python

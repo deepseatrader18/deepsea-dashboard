@@ -1,35 +1,197 @@
-async function fetchOnce(env, symbol, timeoutMs) {
-  const res = await fetch(
-    `${env.TECHNICAL_SERVICE_URL}/analyze?symbol=${encodeURIComponent(symbol)}`,
-    { signal: AbortSignal.timeout(timeoutMs) }
-  );
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`http ${res.status}${body ? `: ${body}` : ''}`);
+// Technical analysis computed directly in this process instead of proxying
+// to a separate Python service. The old setup (a second Render service)
+// slept after ~15 min idle and took 30-50s to wake, so the first dashboard
+// load after any gap reported "unavailable" — computing indicators here
+// removes that extra network hop and its cold-start entirely: as long as
+// the dashboard itself is up (which it is while anyone is using it), this
+// responds immediately.
+const TWELVE_DATA_URL = 'https://api.twelvedata.com/time_series';
+
+const SYMBOL_MAP = {
+  XAUUSD: 'XAU/USD',
+  BTCUSD: 'BTC/USD',
+  EURUSD: 'EUR/USD'
+};
+
+const CACHE_TTL_SUCCESS_MS = 15 * 60 * 1000;
+const CACHE_TTL_FAILURE_MS = 2 * 60 * 1000;
+const cache = {};
+
+function emaSeries(values, span) {
+  const k = 2 / (span + 1);
+  const out = new Array(values.length);
+  out[0] = values[0];
+  for (let i = 1; i < values.length; i++) {
+    out[i] = values[i] * k + out[i - 1] * (1 - k);
   }
-  return res.json();
+  return out;
 }
 
-// Render's free tier spins deepsea-technical-service down after ~15 min
-// idle; waking it back up can take 30-50s. A single request with a short
-// timeout was failing on exactly that cold-start window and reporting
-// "unavailable" even though the service was fine — just not awake yet. Give
-// the first attempt enough time to cover a cold start, then retry once
-// quickly (by then the service is warm, so it should respond fast).
-async function getTechnicalAnalysis(env, symbol) {
-  if (!env.TECHNICAL_SERVICE_URL) return { available: false, reason: 'not configured' };
-  try {
-    const data = await fetchOnce(env, symbol, 40000);
-    return { available: true, data };
-  } catch (firstErr) {
-    console.error('Technical analysis fetch failed (attempt 1):', firstErr.message);
-    try {
-      const data = await fetchOnce(env, symbol, 15000);
-      return { available: true, data };
-    } catch (secondErr) {
-      console.error('Technical analysis fetch failed (attempt 2):', secondErr.message);
-      return { available: false, reason: secondErr.message };
+function sma(values, period) {
+  if (values.length < period) return null;
+  const window = values.slice(-period);
+  return window.reduce((a, b) => a + b, 0) / period;
+}
+
+// Matches the previous Python implementation: a simple rolling mean of
+// gains/losses over the last `period` daily changes (not Wilder smoothing).
+function computeRSI(closes, period = 14) {
+  if (closes.length < period + 1) return null;
+  const gains = [];
+  const losses = [];
+  for (let i = 1; i < closes.length; i++) {
+    const diff = closes[i] - closes[i - 1];
+    gains.push(Math.max(diff, 0));
+    losses.push(Math.max(-diff, 0));
+  }
+  const lastGains = gains.slice(-period);
+  const lastLosses = losses.slice(-period);
+  const avgGain = lastGains.reduce((a, b) => a + b, 0) / period;
+  const avgLoss = lastLosses.reduce((a, b) => a + b, 0) / period;
+  if (avgLoss === 0) return avgGain === 0 ? 50 : 100;
+  const rs = avgGain / avgLoss;
+  return 100 - 100 / (1 + rs);
+}
+
+function computeMACDHistogram(closes) {
+  if (closes.length < 26) return null;
+  const ema12 = emaSeries(closes, 12);
+  const ema26 = emaSeries(closes, 26);
+  const macdLine = closes.map((_, i) => ema12[i] - ema26[i]);
+  const signalLine = emaSeries(macdLine, 9);
+  const n = closes.length;
+  return macdLine[n - 1] - signalLine[n - 1];
+}
+
+// Simple rolling mean of true range over the last `period` days (matches
+// the previous Python implementation, not Wilder smoothing).
+function computeATR(highs, lows, closes, period = 14) {
+  const n = closes.length;
+  if (n < period) return null;
+  const tr = [];
+  for (let i = 0; i < n; i++) {
+    if (i === 0) {
+      tr.push(highs[i] - lows[i]);
+    } else {
+      tr.push(Math.max(highs[i] - lows[i], Math.abs(highs[i] - closes[i - 1]), Math.abs(lows[i] - closes[i - 1])));
     }
+  }
+  const lastWindow = tr.slice(-period);
+  return lastWindow.reduce((a, b) => a + b, 0) / period;
+}
+
+function windowBias(closes, window) {
+  const n = closes.length;
+  if (n < window + 1) return 'unknown';
+  const past = closes[n - window];
+  const changePct = ((closes[n - 1] - past) / past) * 100;
+  if (changePct > 0.5) return 'up';
+  if (changePct < -0.5) return 'down';
+  return 'flat';
+}
+
+async function fetchDailyOhlc(env, symbol) {
+  const tdSymbol = SYMBOL_MAP[symbol];
+  const url = `${TWELVE_DATA_URL}?symbol=${encodeURIComponent(tdSymbol)}&interval=1day&outputsize=100&apikey=${env.TWELVE_DATA_API_KEY}`;
+  const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
+  const data = await res.json();
+
+  if (data && data.status === 'error') {
+    throw new Error(`Twelve Data error: ${data.message || 'unknown error'}`);
+  }
+  if (!res.ok) {
+    throw new Error(`http ${res.status}`);
+  }
+  if (!data || !Array.isArray(data.values) || !data.values.length) {
+    throw new Error(`Unexpected Twelve Data response: ${JSON.stringify(data).slice(0, 300)}`);
+  }
+
+  const rows = data.values
+    .map(v => ({
+      date: v.datetime,
+      open: parseFloat(v.open),
+      high: parseFloat(v.high),
+      low: parseFloat(v.low),
+      close: parseFloat(v.close)
+    }))
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+
+  return rows;
+}
+
+function analyze(symbol, rows) {
+  const n = rows.length;
+  const closes = rows.map(r => r.close);
+  const highs = rows.map(r => r.high);
+  const lows = rows.map(r => r.low);
+  const lastPrice = closes[n - 1];
+
+  const sma20 = n >= 20 ? sma(closes, 20) : null;
+  const sma50 = n >= 50 ? sma(closes, 50) : null;
+  const rsi14 = n >= 15 ? computeRSI(closes) : null;
+  const ema9 = n >= 9 ? emaSeries(closes, 9)[n - 1] : null;
+  const ema50 = n >= 50 ? emaSeries(closes, 50)[n - 1] : null;
+  const macdHistogram = n >= 26 ? computeMACDHistogram(closes) : null;
+  const atr14 = n >= 15 ? computeATR(highs, lows, closes) : null;
+
+  const recentWindow = Math.min(30, n);
+  const resistance = Math.max(...highs.slice(-recentWindow));
+  const support = Math.min(...lows.slice(-recentWindow));
+  const trend = sma50 !== null ? (lastPrice > sma50 ? 'uptrend' : 'downtrend') : 'unknown';
+
+  const round = (v, d) => (v === null || v === undefined || Number.isNaN(v) ? null : Number(v.toFixed(d)));
+
+  return {
+    symbol,
+    price: round(lastPrice, 2),
+    sma20: round(sma20, 2),
+    sma50: round(sma50, 2),
+    ema9: round(ema9, 2),
+    ema50: round(ema50, 2),
+    macdHistogram: round(macdHistogram, 4),
+    rsi14: round(rsi14, 2),
+    atr14: round(atr14, 2),
+    support: round(support, 2),
+    resistance: round(resistance, 2),
+    trend,
+    bias: {
+      '5d': n >= 6 ? windowBias(closes, 5) : 'unknown',
+      '20d': n >= 21 ? windowBias(closes, 20) : 'unknown',
+      '50d': n >= 51 ? windowBias(closes, 50) : 'unknown',
+      '90d': n >= 91 ? windowBias(closes, 90) : 'unknown'
+    },
+    dataPoints: n,
+    asOf: new Date().toISOString()
+  };
+}
+
+async function getFreshTechnical(env, symbol) {
+  const rows = await fetchDailyOhlc(env, symbol);
+  if (rows.length < 2) throw new Error('Not enough market data returned');
+  return analyze(symbol, rows);
+}
+
+async function getTechnicalAnalysis(env, symbol) {
+  if (!env.TWELVE_DATA_API_KEY) return { available: false, reason: 'TWELVE_DATA_API_KEY not configured' };
+  if (!SYMBOL_MAP[symbol]) return { available: false, reason: `Unsupported symbol: ${symbol}` };
+
+  const now = Date.now();
+  const entry = cache[symbol];
+  if (entry) {
+    const ttl = entry.ok ? CACHE_TTL_SUCCESS_MS : CACHE_TTL_FAILURE_MS;
+    if (now - entry.at < ttl) {
+      return entry.ok ? { available: true, data: entry.data } : { available: false, reason: entry.reason };
+    }
+  }
+
+  try {
+    const data = await getFreshTechnical(env, symbol);
+    cache[symbol] = { at: now, ok: true, data };
+    return { available: true, data };
+  } catch (err) {
+    console.error('Technical analysis failed:', err.message);
+    cache[symbol] = { at: now, ok: false, reason: err.message };
+    return { available: false, reason: err.message };
   }
 }
 
