@@ -1,12 +1,16 @@
 import ctypes
+import json
 import os
 import re
 import threading
 import time
+import urllib.error
+import urllib.request
 import webbrowser
 import winsound
 from collections import deque
 from datetime import datetime
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import numpy as np
 import pyautogui
@@ -79,8 +83,10 @@ CLAP_MIN_GAP_SECONDS = 0.05
 CLAP_SAMPLE_RATE = 16000
 CLAP_BLOCK_SIZE = 512
 
-ELEVENLABS_API_KEY = os.getenv('ELEVENLABS_API_KEY', '')
-ELEVENLABS_VOICE_ID = os.getenv('ELEVENLABS_VOICE_ID', '')
+# Edge TTS voice name — full list: run `edge-tts --list-voices` after
+# installing, or pick another from https://github.com/rany2/edge-tts.
+# Default is a natural Indian-English voice that also handles Hindi words.
+EDGE_TTS_VOICE = os.getenv('EDGE_TTS_VOICE', 'en-IN-NeerjaNeural')
 
 
 def has_wake_word(text):
@@ -93,9 +99,8 @@ def confirm_action(recognizer, mic, prompt):
     anything that isn't a clear yes, including silence or a recognition
     failure, as "no" — a misheard command should never run by default.
 
-    Beeps right before it starts listening — without ElevenLabs configured
-    there's no spoken prompt, so nothing else tells you the exact moment
-    it's ready for your "haan"."""
+    Beeps right before it starts listening, so there's always a clear cue
+    for the exact moment it's ready for your "haan"."""
     print(f'-> {prompt} (bolo "haan" ya "confirm karo", {CONFIRM_TIMEOUT_SECONDS} second ke andar)')
     speak_welcome(f'{prompt} Confirm karne ke liye haan boliye.')
     winsound.Beep(1200, 200)
@@ -200,6 +205,44 @@ def _resolve_app(text, lower):
     return None
 
 
+# Matches "gana/song/music" plus "sunao/bajao/chalao" in either order, so it
+# catches "gana sunao", "youtube par koi gana bajao", "sunao gana", etc.
+_SONG_TRIGGER_RE = re.compile(
+    r'\b(gana|gaana|song|music)\b.*\b(sunao|bajao|chalao|play)\b'
+    r'|\b(sunao|bajao|chalao|play)\b.*\b(gana|gaana|song|music)\b'
+)
+# Stripped out before the remaining words become the search query — request
+# scaffolding, not part of the song name.
+_SONG_FILLER_WORDS = {
+    'deepsea', 'youtube', 'par', 'pe', 'pr', 'per', 'gana', 'gaana', 'song',
+    'music', 'sunao', 'bajao', 'chalao', 'play', 'karo', 'mujhe', 'koi',
+    'ek', 'thoda', 'zara', 'jara', 'please', 'abb', 'ab', 'now',
+}
+
+
+def _resolve_play_song(text, lower):
+    """"Gana/song sunao" doesn't just open youtube.com — it searches
+    YouTube for the requested song (or a generic one if none was named)
+    and opens the first result directly, so it actually starts playing."""
+    if not _SONG_TRIGGER_RE.search(lower):
+        return None
+
+    words = [w for w in re.findall(r"[a-zA-Z']+|[ऀ-ॿ]+", text) if w.lower() not in _SONG_FILLER_WORDS]
+    query = ' '.join(words).strip()
+    search_query = query or 'trending bollywood songs'
+
+    def action():
+        from youtube_search import YoutubeSearch
+
+        results = YoutubeSearch(search_query, max_results=1).to_dict()
+        if not results:
+            raise RuntimeError(f'"{search_query}" ke liye koi video nahi mila')
+        webbrowser.open(f'https://www.youtube.com/watch?v={results[0]["id"]}')
+
+    description = f'YouTube par "{search_query}" chalana' if query else 'YouTube par ek gana chalana'
+    return description, action
+
+
 def _resolve_site(text, lower):
     for pattern, url in SITE_COMMANDS.items():
         if re.search(pattern, lower):
@@ -218,8 +261,21 @@ COMMAND_RESOLVERS = [
     _resolve_scroll,
     _resolve_close_window,
     _resolve_app,
+    _resolve_play_song,
     _resolve_site,
 ]
+
+
+def resolve_command(text):
+    """Matches text (spoken or typed, e.g. from the WhatsApp bridge)
+    against COMMAND_RESOLVERS. Returns (description, action) for the
+    first match, or None."""
+    lower = text.lower()
+    for resolver in COMMAND_RESOLVERS:
+        result = resolver(text, lower)
+        if result is not None:
+            return result
+    return None
 
 
 def handle_command(text, recognizer, mic):
@@ -228,46 +284,206 @@ def handle_command(text, recognizer, mic):
     same confirm-first gate, not just the destructive ones, so a
     speech-recognition misfire never silently does something on the
     laptop nobody actually asked for."""
-    lower = text.lower()
-
-    for resolver in COMMAND_RESOLVERS:
-        result = resolver(text, lower)
-        if result is None:
-            continue
-        description, action = result
-        if confirm_action(recognizer, mic, f'Aapne bola: "{text}". {description} — pakka?'):
-            try:
-                action()
-                print(f'-> Done: {description}')
-            except Exception as exc:
-                print(f'-> Action failed: {exc}')
-        else:
-            print(f'-> Cancelled: {description}')
+    result = resolve_command(text)
+    if result is None:
+        print(f'-> Command not recognized: "{text}"')
         return
 
-    print(f'-> Command not recognized: "{text}"')
+    description, action = result
+    if confirm_action(recognizer, mic, f'Aapne bola: "{text}". {description} — pakka?'):
+        try:
+            action()
+            print(f'-> Done: {description}')
+        except Exception as exc:
+            print(f'-> Action failed: {exc}')
+    else:
+        print(f'-> Cancelled: {description}')
+
+
+# --- Optional: lets the WhatsApp bridge (whatsapp-bridge.js) *and* the
+# dashboard's own browser mic (dashboard.html) trigger these same laptop
+# commands, not just chat with the dashboard. Both POST here on localhost
+# instead of speaking into this script's own mic; confirmation happens as
+# a WhatsApp/dashboard reply instead of a spoken "haan". Only starts if
+# WHATSAPP_BRIDGE_TOKEN is set, and every request must carry that same
+# token, so nothing else on the laptop (or network) can trigger actions
+# through it. The dashboard page fetches that same token from its own
+# server (only once logged in) — see /api/laptop-token in index.js.
+WHATSAPP_BRIDGE_TOKEN = os.getenv('WHATSAPP_BRIDGE_TOKEN', '')
+REMOTE_COMMAND_PORT = int(os.getenv('ASSISTANT_LOCAL_PORT', '8765'))
+REMOTE_CONFIRM_TIMEOUT_SECONDS = 60
+# The dashboard page (an https:// origin) calls this local server directly
+# from the browser via fetch(), which needs CORS headers to be allowed —
+# scoped to exactly this origin so no other website's script can also
+# reach it just by knowing (or guessing) it's listening on this port.
+DASHBOARD_ORIGIN = os.getenv('DASHBOARD_CHAT_URL', 'https://deepsea-dashboard.onrender.com').rstrip('/')
+
+_pending_remote_command = None
+_pending_remote_lock = threading.Lock()
+
+
+class _RemoteCommandHandler(BaseHTTPRequestHandler):
+    def _cors_headers(self):
+        if self.headers.get('Origin') == DASHBOARD_ORIGIN:
+            self.send_header('Access-Control-Allow-Origin', DASHBOARD_ORIGIN)
+            self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+            self.send_header('Access-Control-Allow-Headers', 'Content-Type, x-bridge-token')
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self._cors_headers()
+        self.end_headers()
+
+    def _send_json(self, status, payload):
+        body = json.dumps(payload).encode('utf-8')
+        self.send_response(status)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Content-Length', str(len(body)))
+        self._cors_headers()
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _authorized(self):
+        return bool(WHATSAPP_BRIDGE_TOKEN) and self.headers.get('x-bridge-token') == WHATSAPP_BRIDGE_TOKEN
+
+    def do_POST(self):
+        global _pending_remote_command
+        if not self._authorized():
+            self._send_json(401, {'error': 'unauthorized'})
+            return
+
+        length = int(self.headers.get('Content-Length', 0) or 0)
+        raw = self.rfile.read(length) if length else b'{}'
+        try:
+            data = json.loads(raw or b'{}')
+        except ValueError:
+            data = {}
+
+        if self.path == '/command':
+            text = (data.get('text') or '').strip()
+            result = resolve_command(text) if text else None
+            if result is None:
+                self._send_json(200, {'matched': False})
+                return
+            description, action = result
+            with _pending_remote_lock:
+                _pending_remote_command = (description, action, time.time() + REMOTE_CONFIRM_TIMEOUT_SECONDS)
+            self._send_json(200, {'matched': True, 'description': description})
+
+        elif self.path == '/confirm':
+            with _pending_remote_lock:
+                pending = _pending_remote_command
+                _pending_remote_command = None
+            if not pending or time.time() > pending[2]:
+                self._send_json(200, {'ok': False})
+                return
+            description, action = pending[0], pending[1]
+            try:
+                action()
+                self._send_json(200, {'ok': True, 'description': description})
+            except Exception as exc:
+                self._send_json(200, {'ok': False, 'error': str(exc)})
+
+        else:
+            self._send_json(404, {'error': 'not found'})
+
+    def log_message(self, *args):
+        pass  # keep the assistant's own terminal output uncluttered
+
+
+def remote_command_server():
+    server = ThreadingHTTPServer(('127.0.0.1', REMOTE_COMMAND_PORT), _RemoteCommandHandler)
+    print(f'-> WhatsApp command bridge listening on http://127.0.0.1:{REMOTE_COMMAND_PORT}')
+    server.serve_forever()
+
+
+REMOTE_POLL_SECONDS = 8
+
+
+def _dashboard_api_call(method, path, payload=None):
+    url = DASHBOARD_ORIGIN + path
+    data = json.dumps(payload).encode('utf-8') if payload is not None else None
+    request = urllib.request.Request(url, data=data, method=method)
+    request.add_header('x-bridge-token', WHATSAPP_BRIDGE_TOKEN)
+    if data is not None:
+        request.add_header('Content-Type', 'application/json')
+    with urllib.request.urlopen(request, timeout=15) as response:
+        return json.loads(response.read().decode('utf-8'))
+
+
+def remote_dashboard_poll_loop():
+    """Lets the dashboard command this laptop from anywhere — a different
+    device, a different city — not just from the same machine. Render
+    can't reach into this laptop directly (no inbound connection is ever
+    opened here), so this polls outward for work instead: check in with
+    /api/laptop-remote/poll every few seconds, resolve or execute whatever
+    it finds using the exact same resolve_command()/confirm machinery as
+    the mic and the WhatsApp bridge, and report the result back."""
+    global _pending_remote_command
+    print(f'-> Polling {DASHBOARD_ORIGIN} for remote dashboard commands every {REMOTE_POLL_SECONDS}s')
+    while True:
+        try:
+            poll = _dashboard_api_call('GET', '/api/laptop-remote/poll')
+            kind = poll.get('type')
+
+            if kind == 'resolve':
+                cmd_id = poll.get('id')
+                text = (poll.get('text') or '').strip()
+                result = resolve_command(text) if text else None
+                if result is None:
+                    _dashboard_api_call('POST', '/api/laptop-remote/resolved', {'id': cmd_id, 'matched': False})
+                else:
+                    description, action = result
+                    with _pending_remote_lock:
+                        _pending_remote_command = (description, action, time.time() + REMOTE_CONFIRM_TIMEOUT_SECONDS)
+                    _dashboard_api_call('POST', '/api/laptop-remote/resolved', {'id': cmd_id, 'matched': True, 'description': description})
+
+            elif kind == 'execute':
+                cmd_id = poll.get('id')
+                with _pending_remote_lock:
+                    pending = _pending_remote_command
+                    _pending_remote_command = None
+                if not pending or time.time() > pending[2]:
+                    _dashboard_api_call('POST', '/api/laptop-remote/executed', {'id': cmd_id, 'ok': False})
+                else:
+                    description, action = pending[0], pending[1]
+                    try:
+                        action()
+                        _dashboard_api_call('POST', '/api/laptop-remote/executed', {'id': cmd_id, 'ok': True, 'description': description})
+                    except Exception as exc:
+                        _dashboard_api_call('POST', '/api/laptop-remote/executed', {'id': cmd_id, 'ok': False, 'description': str(exc)})
+
+        except Exception:
+            pass  # dashboard asleep / network hiccup — just retry next cycle
+
+        time.sleep(REMOTE_POLL_SECONDS)
 
 
 def speak_welcome(text):
-    if not ELEVENLABS_API_KEY or not ELEVENLABS_VOICE_ID:
-        print('-> ElevenLabs voice skipped (ELEVENLABS_API_KEY / ELEVENLABS_VOICE_ID not set in .env)')
-        return
+    # Microsoft Edge's free neural text-to-speech (no API key, no signup,
+    # no usage limit) — switched from ElevenLabs because its free tier
+    # blocks all voices ("Free users cannot use library voices via the API").
     try:
-        from elevenlabs.client import ElevenLabs
+        import asyncio
+        import tempfile
 
-        client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
-        audio = client.text_to_speech.convert(
-            voice_id=ELEVENLABS_VOICE_ID,
-            model_id='eleven_multilingual_v2',
-            output_format='pcm_24000',
-            text=text,
-        )
-        pcm_bytes = b''.join(audio)
-        samples = np.frombuffer(pcm_bytes, dtype=np.int16)
-        sd.play(samples, samplerate=24000)
-        sd.wait()
+        import edge_tts
+        from playsound import playsound
+
+        async def _generate():
+            communicate = edge_tts.Communicate(text, voice=EDGE_TTS_VOICE)
+            with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as f:
+                path = f.name
+            await communicate.save(path)
+            return path
+
+        mp3_path = asyncio.run(_generate())
+        try:
+            playsound(mp3_path)
+        finally:
+            os.remove(mp3_path)
     except Exception as exc:
-        print(f'-> ElevenLabs voice failed: {exc}')
+        print(f'-> Voice failed: {exc}')
 
 
 def handle_double_clap():
@@ -335,6 +551,12 @@ def main():
 
     if CLAP_ENABLED:
         threading.Thread(target=clap_listener, daemon=True).start()
+
+    if WHATSAPP_BRIDGE_TOKEN:
+        threading.Thread(target=remote_command_server, daemon=True).start()
+        threading.Thread(target=remote_dashboard_poll_loop, daemon=True).start()
+    else:
+        print('-> WhatsApp/dashboard command bridges disabled (WHATSAPP_BRIDGE_TOKEN not set in .env)')
 
     awaiting_command = False
     while True:
