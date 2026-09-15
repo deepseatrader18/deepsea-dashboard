@@ -113,6 +113,22 @@ fir command boliye (jaise "chrome kholo" ya "gana sunao"). Agar wo ek laptop
 command hai, dashboard bolegi "... pakka? haan boliye" — aap bas **"haan"**
 boliye (60 second ke andar), command laptop par chal jayegi.
 
+### Kisi doosri jagah se (dusre laptop/city se) apna ghar wala laptop control karna
+
+Ye bhi automatic hai — koi alag setting nahi chahiye. Agar aap kisi **doosre laptop
+ya city** se dashboard kholte ho (aapka ghar wala laptop ON hai aur uspar
+`python assistant.py` chal raha hai), to dashboard pehle apne hi (jis laptop se
+aap abhi dashboard khol rahe ho) 127.0.0.1 try karta hai — wo fail hoga
+(kyunki wahan assistant.py nahi chal raha) — fir apne aap **Render ke through
+ghar wale laptop tak command relay kar deta hai**. Isme thoda zyada time
+(kuch second) lagta hai kyunki dono taraf (aapka browser aur ghar wala
+laptop) Render se har ~8 second mein check karte hain, seedha connection
+nahi hota.
+
+**Zaroori:** ghar wale laptop par `python assistant.py` chalna zaroori hai
+(terminal khula, internet on) — tabhi wo Render se poll kar paayega. Agar
+wo band hai, dashboard bolegi "aapka laptop abhi online nahi lag raha".
+
 ## WhatsApp bridge (optional) — फोन से DeepSea से बात करना
 
 ये एक अलग Node.js script (`whatsapp-bridge.js`) है, जो आपके अपने WhatsApp account से

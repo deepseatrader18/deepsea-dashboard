@@ -1,6 +1,7 @@
 const express = require('express');
 const session = require('express-session');
 const path = require('path');
+const crypto = require('crypto');
 const { buildAgents, checkAllAgents } = require('./agents');
 const { getForexFactoryNews } = require('./trading/news');
 const { getTechnicalAnalysis } = require('./trading/technical');
@@ -367,6 +368,89 @@ app.get('/api/laptop-token', requireAuth, (req, res) => {
     return res.status(404).json({ error: 'WHATSAPP_BRIDGE_TOKEN not set on server' });
   }
   res.json({ token: WHATSAPP_BRIDGE_TOKEN });
+});
+
+// Remote laptop control: lets the dashboard command the user's home laptop
+// from any other device/city, not just from the same machine (that's what
+// /api/laptop-token above is for). assistant.py can't be reached directly
+// from a browser that isn't on its own network, so this is a small mailbox
+// the home laptop polls (desktop-assistant/assistant.py's
+// remote_dashboard_poll_loop) and the dashboard page also polls — Render
+// just relays between the two, it never runs anything itself. In-memory
+// and single-slot on purpose: one household, one laptop, one command
+// in flight at a time is enough, and it avoids needing a database for
+// something this small and short-lived (a few seconds to a minute).
+let remoteLaptopCmd = null;
+// { id, text, status: 'pending_resolve'|'resolved'|'pending_confirm'|'done',
+//   matched, description, ok, createdAt }
+const REMOTE_LAPTOP_STALE_MS = 5 * 60 * 1000;
+
+function isRemoteLaptopStale() {
+  return !remoteLaptopCmd || Date.now() - remoteLaptopCmd.createdAt > REMOTE_LAPTOP_STALE_MS;
+}
+
+app.post('/api/laptop-remote/command', requireAuth, (req, res) => {
+  const text = ((req.body && req.body.text) || '').trim();
+  if (!text) return res.status(400).json({ error: 'No text provided' });
+  remoteLaptopCmd = { id: crypto.randomUUID(), text, status: 'pending_resolve', createdAt: Date.now() };
+  res.json({ id: remoteLaptopCmd.id });
+});
+
+app.get('/api/laptop-remote/status/:id', requireAuth, (req, res) => {
+  if (isRemoteLaptopStale() || remoteLaptopCmd.id !== req.params.id) {
+    return res.json({ status: 'gone' });
+  }
+  const { status, matched, description, ok } = remoteLaptopCmd;
+  res.json({ status, matched, description, ok });
+});
+
+app.post('/api/laptop-remote/confirm', requireAuth, (req, res) => {
+  const id = req.body && req.body.id;
+  if (!isRemoteLaptopStale() && remoteLaptopCmd.id === id && remoteLaptopCmd.status === 'resolved') {
+    remoteLaptopCmd.status = 'pending_confirm';
+  }
+  res.json({ ok: true });
+});
+
+// From here down: assistant.py's remote_dashboard_poll_loop calls these,
+// authenticated the same way the WhatsApp bridge is (shared secret, no
+// dashboard session — it's a background script on the user's own PC, not
+// a browser).
+function requireBridgeToken(req, res, next) {
+  if (!WHATSAPP_BRIDGE_TOKEN) return res.status(500).json({ error: 'WHATSAPP_BRIDGE_TOKEN not set on server' });
+  if (req.get('x-bridge-token') !== WHATSAPP_BRIDGE_TOKEN) return res.status(401).json({ error: 'unauthorized' });
+  next();
+}
+
+app.get('/api/laptop-remote/poll', requireBridgeToken, (req, res) => {
+  if (isRemoteLaptopStale()) return res.json({ type: 'none' });
+  if (remoteLaptopCmd.status === 'pending_resolve') {
+    return res.json({ type: 'resolve', id: remoteLaptopCmd.id, text: remoteLaptopCmd.text });
+  }
+  if (remoteLaptopCmd.status === 'pending_confirm') {
+    return res.json({ type: 'execute', id: remoteLaptopCmd.id });
+  }
+  res.json({ type: 'none' });
+});
+
+app.post('/api/laptop-remote/resolved', requireBridgeToken, (req, res) => {
+  const { id, matched, description } = req.body || {};
+  if (!isRemoteLaptopStale() && remoteLaptopCmd.id === id && remoteLaptopCmd.status === 'pending_resolve') {
+    remoteLaptopCmd.matched = !!matched;
+    remoteLaptopCmd.description = description || '';
+    remoteLaptopCmd.status = matched ? 'resolved' : 'done';
+  }
+  res.json({ ok: true });
+});
+
+app.post('/api/laptop-remote/executed', requireBridgeToken, (req, res) => {
+  const { id, ok, description } = req.body || {};
+  if (!isRemoteLaptopStale() && remoteLaptopCmd.id === id && remoteLaptopCmd.status === 'pending_confirm') {
+    remoteLaptopCmd.ok = !!ok;
+    if (description) remoteLaptopCmd.description = description;
+    remoteLaptopCmd.status = 'done';
+  }
+  res.json({ ok: true });
 });
 
 app.post('/api/chat', requireAuth, async (req, res) => {

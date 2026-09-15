@@ -596,16 +596,17 @@
 
   // Real laptop control (Chrome, lock, media, gana sunao, etc.) — the same
   // things desktop-assistant/assistant.py understands by voice or over the
-  // WhatsApp bridge. The browser can't reach the user's own laptop through
-  // Render, so this fetches assistant.py's local server directly at
-  // 127.0.0.1 (only reachable because this page and that server are on the
-  // same machine); if it's not running, tryLaptopCommand() fails silently
-  // and the caller falls through to the browser-only APP_LINKS/Gemini path
-  // below, so the mic still works even without the laptop assistant on.
+  // WhatsApp bridge, now from the dashboard's own mic too — from the same
+  // laptop instantly (LOCAL_ASSISTANT_URL, same-machine only), or from any
+  // other device/city via the remote relay below (a few seconds slower,
+  // since both sides only check in with Render every few seconds instead
+  // of a live connection). If neither reaches a running assistant.py, the
+  // caller falls through to the browser-only APP_LINKS/Gemini path, so the
+  // mic still works exactly as before even with no laptop assistant at all.
   const LOCAL_ASSISTANT_URL = 'http://127.0.0.1:8765';
   const LAPTOP_CONFIRM_WORDS = ['haan', 'ha', 'yes', 'confirm'];
   let laptopToken = null;
-  let pendingLaptopCommand = null;
+  let pendingLaptopCommand = null; // { mode: 'local'|'remote', description, id? }
   let awaitingLaptopConfirm = false;
 
   fetch('/api/laptop-token')
@@ -613,25 +614,91 @@
     .then(data => { if (data && data.token) laptopToken = data.token; })
     .catch(() => { /* not logged in yet, or route unavailable — mic still works without it */ });
 
-  async function tryLaptopCommand(text) {
+  function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+
+  async function tryLocalLaptopCommand(text) {
     if (!laptopToken) return false;
     try {
       const res = await fetch(`${LOCAL_ASSISTANT_URL}/command`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-bridge-token': laptopToken },
-        body: JSON.stringify({ text })
+        body: JSON.stringify({ text }),
+        signal: AbortSignal.timeout(2500)
       });
       if (!res.ok) return false;
       const data = await res.json();
       if (!data.matched) return false;
-      pendingLaptopCommand = { description: data.description };
+      pendingLaptopCommand = { mode: 'local', description: data.description };
       awaitingLaptopConfirm = true;
       logLine('DEEPSEA', `Aapne bola: "${text}". ${data.description} — pakka? Boliye "haan".`);
       speak(`${data.description}. Confirm karne ke liye haan boliye.`);
       return true;
     } catch (err) {
-      return false; // laptop assistant not running on this machine — fall through
+      return false; // laptop assistant not running on this machine — try remote next
     }
+  }
+
+  // Only worth trying when the phrase actually sounds like a system
+  // command — otherwise every plain trading question would also wait on a
+  // multi-second round trip to the home laptop before Gemini ever answers.
+  // Not a perfect mirror of assistant.py's own resolvers, just a cheap
+  // filter; a false "no" only costs what happens today (straight to
+  // Gemini), a false "yes" only costs a few extra seconds before that
+  // same fallback.
+  const LAPTOP_COMMAND_KEYWORDS = [
+    'shutdown', 'restart', 'reboot', 'type karo', 'click', 'screenshot',
+    'lock', 'volume', 'mute', 'pause', 'next', 'previous', 'scroll',
+    'chrome', 'edge', 'notepad', 'calculator', 'paint', 'explorer',
+    'task manager', 'spotify', 'whatsapp', 'vs code', 'visual studio code',
+    'youtube', 'gmail', 'forex factory', 'kholo', 'kholna', 'band karo',
+    'gana', 'gaana', 'song', 'music', 'sunao', 'bajao', 'chalao'
+  ];
+
+  async function pollRemoteStatus(id, wantedStatuses, maxWaitMs) {
+    const start = Date.now();
+    while (Date.now() - start < maxWaitMs) {
+      await sleep(1500);
+      try {
+        const res = await fetch(`/api/laptop-remote/status/${id}`);
+        const data = await res.json();
+        if (data.status === 'gone') return null;
+        if (wantedStatuses.includes(data.status)) return data;
+      } catch (err) { /* keep polling */ }
+    }
+    return null;
+  }
+
+  async function tryRemoteLaptopCommand(text) {
+    const lower = text.toLowerCase();
+    if (!LAPTOP_COMMAND_KEYWORDS.some(k => lower.includes(k))) return false;
+    try {
+      const res = await fetch('/api/laptop-remote/command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text })
+      });
+      if (!res.ok) return false;
+      const { id } = await res.json();
+      const result = await pollRemoteStatus(id, ['resolved', 'done'], 15000);
+      if (!result) {
+        logLine('SYSTEM', 'Ghar wala laptop abhi online nahi lag raha (assistant.py chal raha hai check karein).');
+        speak('Aapka laptop abhi online nahi lag raha.');
+        return true; // already answered — don't also send this to Gemini
+      }
+      if (result.status === 'done') return false; // laptop itself said this isn't a laptop command
+      pendingLaptopCommand = { mode: 'remote', id, description: result.description };
+      awaitingLaptopConfirm = true;
+      logLine('DEEPSEA', `Aapne bola: "${text}". ${result.description} — pakka? Boliye "haan".`);
+      speak(`${result.description}. Confirm karne ke liye haan boliye.`);
+      return true;
+    } catch (err) {
+      return false;
+    }
+  }
+
+  async function tryLaptopCommand(text) {
+    if (await tryLocalLaptopCommand(text)) return true;
+    return tryRemoteLaptopCommand(text);
   }
 
   async function confirmLaptopCommand(text) {
@@ -644,22 +711,47 @@
       speak('Theek hai, cancel kar diya.');
       return;
     }
+
+    if (pending.mode === 'local') {
+      try {
+        const res = await fetch(`${LOCAL_ASSISTANT_URL}/confirm`, {
+          method: 'POST',
+          headers: { 'x-bridge-token': laptopToken }
+        });
+        const data = await res.json();
+        if (data.ok) {
+          logLine('DEEPSEA', `Ho gaya: ${data.description}`);
+          speak('Ho gaya, boss.');
+        } else {
+          logLine('DEEPSEA', `Cancelled (time out ho gaya): ${pending.description}`);
+          speak('Ye cancel ho gaya, dobara try karo.');
+        }
+      } catch (err) {
+        logLine('SYSTEM', 'Laptop assistant se connect nahi ho paaya.');
+        speak('Laptop assistant se connect nahi ho paaya.');
+      }
+      return;
+    }
+
+    // Remote: tell Render the user confirmed, then wait for the home
+    // laptop's next poll cycle to pick it up, execute it, and report back.
     try {
-      const res = await fetch(`${LOCAL_ASSISTANT_URL}/confirm`, {
+      await fetch('/api/laptop-remote/confirm', {
         method: 'POST',
-        headers: { 'x-bridge-token': laptopToken }
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: pending.id })
       });
-      const data = await res.json();
-      if (data.ok) {
-        logLine('DEEPSEA', `Ho gaya: ${data.description}`);
+      const result = await pollRemoteStatus(pending.id, ['done'], 20000);
+      if (result && result.ok) {
+        logLine('DEEPSEA', `Ho gaya: ${result.description || pending.description}`);
         speak('Ho gaya, boss.');
       } else {
         logLine('DEEPSEA', `Cancelled (time out ho gaya): ${pending.description}`);
         speak('Ye cancel ho gaya, dobara try karo.');
       }
     } catch (err) {
-      logLine('SYSTEM', 'Laptop assistant se connect nahi ho paaya.');
-      speak('Laptop assistant se connect nahi ho paaya.');
+      logLine('SYSTEM', 'Laptop se connect nahi ho paaya.');
+      speak('Laptop se connect nahi ho paaya.');
     }
   }
 

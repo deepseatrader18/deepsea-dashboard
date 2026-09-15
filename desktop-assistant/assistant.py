@@ -4,6 +4,8 @@ import os
 import re
 import threading
 import time
+import urllib.error
+import urllib.request
 import webbrowser
 import winsound
 from collections import deque
@@ -395,6 +397,68 @@ def remote_command_server():
     server.serve_forever()
 
 
+REMOTE_POLL_SECONDS = 8
+
+
+def _dashboard_api_call(method, path, payload=None):
+    url = DASHBOARD_ORIGIN + path
+    data = json.dumps(payload).encode('utf-8') if payload is not None else None
+    request = urllib.request.Request(url, data=data, method=method)
+    request.add_header('x-bridge-token', WHATSAPP_BRIDGE_TOKEN)
+    if data is not None:
+        request.add_header('Content-Type', 'application/json')
+    with urllib.request.urlopen(request, timeout=15) as response:
+        return json.loads(response.read().decode('utf-8'))
+
+
+def remote_dashboard_poll_loop():
+    """Lets the dashboard command this laptop from anywhere — a different
+    device, a different city — not just from the same machine. Render
+    can't reach into this laptop directly (no inbound connection is ever
+    opened here), so this polls outward for work instead: check in with
+    /api/laptop-remote/poll every few seconds, resolve or execute whatever
+    it finds using the exact same resolve_command()/confirm machinery as
+    the mic and the WhatsApp bridge, and report the result back."""
+    global _pending_remote_command
+    print(f'-> Polling {DASHBOARD_ORIGIN} for remote dashboard commands every {REMOTE_POLL_SECONDS}s')
+    while True:
+        try:
+            poll = _dashboard_api_call('GET', '/api/laptop-remote/poll')
+            kind = poll.get('type')
+
+            if kind == 'resolve':
+                cmd_id = poll.get('id')
+                text = (poll.get('text') or '').strip()
+                result = resolve_command(text) if text else None
+                if result is None:
+                    _dashboard_api_call('POST', '/api/laptop-remote/resolved', {'id': cmd_id, 'matched': False})
+                else:
+                    description, action = result
+                    with _pending_remote_lock:
+                        _pending_remote_command = (description, action, time.time() + REMOTE_CONFIRM_TIMEOUT_SECONDS)
+                    _dashboard_api_call('POST', '/api/laptop-remote/resolved', {'id': cmd_id, 'matched': True, 'description': description})
+
+            elif kind == 'execute':
+                cmd_id = poll.get('id')
+                with _pending_remote_lock:
+                    pending = _pending_remote_command
+                    _pending_remote_command = None
+                if not pending or time.time() > pending[2]:
+                    _dashboard_api_call('POST', '/api/laptop-remote/executed', {'id': cmd_id, 'ok': False})
+                else:
+                    description, action = pending[0], pending[1]
+                    try:
+                        action()
+                        _dashboard_api_call('POST', '/api/laptop-remote/executed', {'id': cmd_id, 'ok': True, 'description': description})
+                    except Exception as exc:
+                        _dashboard_api_call('POST', '/api/laptop-remote/executed', {'id': cmd_id, 'ok': False, 'description': str(exc)})
+
+        except Exception:
+            pass  # dashboard asleep / network hiccup — just retry next cycle
+
+        time.sleep(REMOTE_POLL_SECONDS)
+
+
 def speak_welcome(text):
     # Microsoft Edge's free neural text-to-speech (no API key, no signup,
     # no usage limit) — switched from ElevenLabs because its free tier
@@ -490,8 +554,9 @@ def main():
 
     if WHATSAPP_BRIDGE_TOKEN:
         threading.Thread(target=remote_command_server, daemon=True).start()
+        threading.Thread(target=remote_dashboard_poll_loop, daemon=True).start()
     else:
-        print('-> WhatsApp command bridge disabled (WHATSAPP_BRIDGE_TOKEN not set in .env)')
+        print('-> WhatsApp/dashboard command bridges disabled (WHATSAPP_BRIDGE_TOKEN not set in .env)')
 
     awaiting_command = False
     while True:
