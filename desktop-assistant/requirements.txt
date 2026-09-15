@@ -1,3 +1,7 @@
 SpeechRecognition==3.10.4
 PyAudio==0.2.14
 PyAutoGUI==0.9.54
+numpy==1.26.4
+sounddevice==0.4.6
+elevenlabs==1.9.0
+python-dotenv==1.0.1
