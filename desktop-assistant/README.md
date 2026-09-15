@@ -9,11 +9,12 @@
 - **Apps kholna**: Chrome, Edge, Notepad, Calculator, Paint, File Explorer, Task Manager, Spotify, WhatsApp, VS Code — जैसे "DeepSea, Chrome kholo"
 - **Active window band karna**: "ye band karo" / "close this"
 - **Media control**: volume up/down/mute, play/pause, next/previous track
-- **System actions**: screenshot lena (Desktop पर save होता है), laptop lock करना
-- **Shutdown/Restart**: पूछने पर एक confirmation step है ("haan" बोलना ज़रूरी है) — गलती से mic कुछ गलत सुन ले तो भी laptop बंद ना हो
+- **System actions**: screenshot lena (Desktop पर save होता है), laptop lock करना, shutdown/restart
 - **Typing**: "DeepSea, type karo <jo bhi bolna hai>" — जो भी बोलोगे वो active field में type हो जाएगा
 - **Clicking**: "click karo" / "double click" / "right click" — mouse जहाँ है वहीं click होता है (आवाज़ से किसी specific button पर click नहीं हो सकता, mouse पहले वहाँ ले जाना होगा)
 - "scroll down" / "scroll up" बोलकर current page scroll करना
+
+**हर command confirm होता है, execute होने से पहले:** wake word ("DeepSea") ke baad jo bhi command bolo, assistant use wapas dohrayega ("Aapne bola: ... — pakka?") aur sirf tabhi karega jab tum **"haan"** ya **"confirm karo"** bologe (~6 second ke andar). Kuch aur bolo ya chup raho to wo command cancel ho jata hai, kuch nahi hota. Ye galti se — mic ne kuch aur sun liya, ya galat samjha — kisi bhi action ko rokta hai.
 
 ## Setup (Windows)
 

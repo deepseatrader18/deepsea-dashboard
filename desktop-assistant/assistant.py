@@ -43,10 +43,13 @@ APP_COMMANDS = {
 
 SCROLL_AMOUNT = 600
 
-# Phrases that must be spoken back exactly (in the confirmation reply) before
-# a destructive system action runs — cuts the chance a speech-recognition
-# misfire shuts the machine down.
-CONFIRM_WORDS = ('haan', 'ha', 'yes', 'confirm', 'karo')
+# Every recognized command is repeated back and must be confirmed with one
+# of these words before it runs — cuts the chance a speech-recognition
+# misfire (or a stray word from background conversation) does something on
+# the laptop nobody actually asked for. Deliberately excludes generic verbs
+# like "karo" that show up in most Hindi commands themselves, which would
+# make confirmation trivially true by accident.
+CONFIRM_WORDS = ('haan', 'ha', 'yes', 'confirm')
 CONFIRM_TIMEOUT_SECONDS = 6
 
 # --- Double-clap trigger (Jarvis-style), optional ---------------------------
@@ -70,11 +73,10 @@ def has_wake_word(text):
 
 
 def confirm_action(recognizer, mic, prompt):
-    """Speaks/prints a yes-or-no prompt and blocks for one reply. Used only
-    before destructive actions (shutdown/restart) — treats anything that
-    isn't a clear yes, including silence or a recognition failure, as "no",
-    since a misheard "shutdown" should never proceed by default."""
-    print(f'-> {prompt} (bolo "haan" {CONFIRM_TIMEOUT_SECONDS} second ke andar, warna cancel ho jayega)')
+    """Speaks/prints a yes-or-no prompt and blocks for one reply. Treats
+    anything that isn't a clear yes, including silence or a recognition
+    failure, as "no" — a misheard command should never run by default."""
+    print(f'-> {prompt} (bolo "haan" ya "confirm karo", {CONFIRM_TIMEOUT_SECONDS} second ke andar)')
     speak_welcome(f'{prompt} Confirm karne ke liye haan boliye.')
     try:
         with mic as source:
@@ -86,126 +88,141 @@ def confirm_action(recognizer, mic, prompt):
         return False
 
 
-def handle_command(text, recognizer, mic):
-    lower = text.lower()
+# Each resolver takes (original_text, lowercased_text) and returns either
+# None (no match) or (description, action) — description is what gets
+# repeated back for confirmation, action is the zero-arg callable that
+# actually does it. Nothing here runs until handle_command confirms it.
+# Order matters: more specific patterns first, e.g. typing before the
+# generic word-matchers below it that dictated text could otherwise trip.
 
-    # --- Destructive system actions: confirm before running ----------------
+def _resolve_shutdown(text, lower):
     if re.search(r'\bshutdown\b|\bshut down\b|\blaptop band karo\b|\bpc band karo\b|\bcomputer band karo\b', lower):
-        if confirm_action(recognizer, mic, 'Laptop shutdown karna hai?'):
-            print('-> Shutting down')
-            os.system('shutdown /s /t 5')
-        else:
-            print('-> Shutdown cancelled')
-        return
+        return 'laptop shutdown karna', lambda: os.system('shutdown /s /t 5')
+    return None
 
+
+def _resolve_restart(text, lower):
     if re.search(r'\brestart\b|\breboot\b', lower):
-        if confirm_action(recognizer, mic, 'Laptop restart karna hai?'):
-            print('-> Restarting')
-            os.system('shutdown /r /t 5')
-        else:
-            print('-> Restart cancelled')
-        return
+        return 'laptop restart karna', lambda: os.system('shutdown /r /t 5')
+    return None
 
-    # --- Typing: "type karo <text>" / "likho <text>" — must come before the
-    # other checks below since the dictated text could itself contain words
-    # like "open" or "close" that would otherwise match a different command.
-    type_match = re.search(r'\b(?:type karo|likho|type)\s+(.+)', text, re.IGNORECASE)
-    if type_match:
-        to_type = type_match.group(1).strip()
-        pyautogui.write(to_type, interval=0.02)
-        print(f'-> Typed: "{to_type}"')
-        return
 
-    # --- Clicking (at the current mouse position — voice can't point at a
-    # spot on screen, so move the mouse there yourself first) --------------
+def _resolve_type(text, lower):
+    match = re.search(r'\b(?:type karo|likho|type)\s+(.+)', text, re.IGNORECASE)
+    if match:
+        to_type = match.group(1).strip()
+        return f'"{to_type}" type karna', lambda: pyautogui.write(to_type, interval=0.02)
+    return None
+
+
+def _resolve_click(text, lower):
     if 'double click' in lower:
-        pyautogui.doubleClick()
-        print('-> Double-clicked')
-        return
+        return 'double click karna', pyautogui.doubleClick
     if 'right click' in lower:
-        pyautogui.rightClick()
-        print('-> Right-clicked')
-        return
+        return 'right click karna', pyautogui.rightClick
     if re.search(r'\bclick\b|\bclick karo\b', lower):
-        pyautogui.click()
-        print('-> Clicked')
-        return
+        return 'click karna', pyautogui.click
+    return None
 
-    # --- Screenshot / lock ---------------------------------------------
+
+def _resolve_screenshot(text, lower):
     if 'screenshot' in lower:
         path = os.path.join(
             os.path.expanduser('~'), 'Desktop', f'deepsea_screenshot_{datetime.now():%Y%m%d_%H%M%S}.png'
         )
-        try:
-            pyautogui.screenshot(path)
-            print(f'-> Screenshot saved: {path}')
-        except Exception as exc:
-            print(f'-> Screenshot failed: {exc}')
-        return
+        return 'screenshot lena', lambda: pyautogui.screenshot(path)
+    return None
 
+
+def _resolve_lock(text, lower):
     if re.search(r'\block\b|\block karo\b', lower):
-        ctypes.windll.user32.LockWorkStation()
-        print('-> Locked')
-        return
+        return 'laptop lock karna', ctypes.windll.user32.LockWorkStation
+    return None
 
-    # --- Media control ---------------------------------------------------
+
+def _resolve_media(text, lower):
     if re.search(r'\bvolume\s*(up|badhao|increase)\b', lower):
-        pyautogui.press('volumeup', presses=5)
-        print('-> Volume up')
-        return
+        return 'volume badhana', lambda: pyautogui.press('volumeup', presses=5)
     if re.search(r'\bvolume\s*(down|kam|ghatao|decrease)\b', lower):
-        pyautogui.press('volumedown', presses=5)
-        print('-> Volume down')
-        return
+        return 'volume kam karna', lambda: pyautogui.press('volumedown', presses=5)
     if 'mute' in lower or 'volume band' in lower:
-        pyautogui.press('volumemute')
-        print('-> Muted')
-        return
+        return 'mute karna', lambda: pyautogui.press('volumemute')
     if re.search(r'\bnext (song|track)\b|\bagla gaana\b|\bagla gana\b', lower):
-        pyautogui.press('nexttrack')
-        print('-> Next track')
-        return
+        return 'next track', lambda: pyautogui.press('nexttrack')
     if re.search(r'\bprevious (song|track)\b|\bpichla gaana\b|\bpichla gana\b', lower):
-        pyautogui.press('prevtrack')
-        print('-> Previous track')
-        return
+        return 'previous track', lambda: pyautogui.press('prevtrack')
     if re.search(r'\bpause\b|\brok do\b|\bplay\b|\bchalao\b', lower):
-        pyautogui.press('playpause')
-        print('-> Play/pause')
-        return
+        return 'play/pause karna', lambda: pyautogui.press('playpause')
+    return None
 
-    # --- Scroll ------------------------------------------------------------
+
+def _resolve_scroll(text, lower):
     if 'scroll down' in lower or 'neeche scroll' in lower:
-        pyautogui.scroll(-SCROLL_AMOUNT)
-        print('-> Scrolled down')
-        return
-
+        return 'neeche scroll karna', lambda: pyautogui.scroll(-SCROLL_AMOUNT)
     if 'scroll up' in lower or 'upar scroll' in lower:
-        pyautogui.scroll(SCROLL_AMOUNT)
-        print('-> Scrolled up')
-        return
+        return 'upar scroll karna', lambda: pyautogui.scroll(SCROLL_AMOUNT)
+    return None
 
-    # --- Close the active window (Alt+F4) — a generic "close this", not a
-    # fuzzy-matched kill of some other named app; that's too easy to get
-    # wrong from a misheard app name. -------------------------------------
+
+def _resolve_close_window(text, lower):
+    # A generic "close the active window", not a fuzzy-matched kill of some
+    # other named app — that's too easy to get wrong from a misheard name.
     if re.search(r'\b(ye|is|window)\s*(ko)?\s*band karo\b|\bclose (this|window)\b', lower):
-        pyautogui.hotkey('alt', 'f4')
-        print('-> Closed active window')
-        return
+        return 'active window band karna', lambda: pyautogui.hotkey('alt', 'f4')
+    return None
 
-    # --- Open an app ---------------------------------------------------
+
+def _resolve_app(text, lower):
     for pattern, app_cmd in APP_COMMANDS.items():
         if re.search(pattern, lower):
-            os.system(f'start "" {app_cmd}')
-            print(f'-> Opened {app_cmd}')
-            return
+            return f'{app_cmd} kholna', lambda: os.system(f'start "" {app_cmd}')
+    return None
 
-    # --- Open a website --------------------------------------------------
+
+def _resolve_site(text, lower):
     for pattern, url in SITE_COMMANDS.items():
         if re.search(pattern, lower):
-            webbrowser.open(url)
-            print(f'-> Opened {url}')
-            return
+            return f'{url} kholna', lambda: webbrowser.open(url)
+    return None
+
+
+COMMAND_RESOLVERS = [
+    _resolve_shutdown,
+    _resolve_restart,
+    _resolve_type,
+    _resolve_click,
+    _resolve_screenshot,
+    _resolve_lock,
+    _resolve_media,
+    _resolve_scroll,
+    _resolve_close_window,
+    _resolve_app,
+    _resolve_site,
+]
+
+
+def handle_command(text, recognizer, mic):
+    """Resolves the spoken text to at most one action, repeats it back for
+    confirmation, and only then runs it — every command goes through this
+    same confirm-first gate, not just the destructive ones, so a
+    speech-recognition misfire never silently does something on the
+    laptop nobody actually asked for."""
+    lower = text.lower()
+
+    for resolver in COMMAND_RESOLVERS:
+        result = resolver(text, lower)
+        if result is None:
+            continue
+        description, action = result
+        if confirm_action(recognizer, mic, f'Aapne bola: "{text}". {description} — pakka?'):
+            try:
+                action()
+                print(f'-> Done: {description}')
+            except Exception as exc:
+                print(f'-> Action failed: {exc}')
+        else:
+            print(f'-> Cancelled: {description}')
+        return
 
     print(f'-> Command not recognized: "{text}"')
 
