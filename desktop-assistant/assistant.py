@@ -4,6 +4,7 @@ import re
 import threading
 import time
 import webbrowser
+import winsound
 from collections import deque
 from datetime import datetime
 
@@ -15,7 +16,15 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-WAKE_WORDS = ['deepsea', 'deep sea', 'deepsee', 'dipsi', 'dipsy']
+# Google's speech-to-text regularly mishears "DeepSea" in an Indian accent
+# as similarly-sounding real words — observed in practice: "gypsy", "dip
+# singh", "tipsy", "deepti". Listing them as wake words too is safe: hearing
+# one only starts listening for a command, and every command still needs a
+# separate spoken "haan"/"confirm karo" before it does anything.
+WAKE_WORDS = [
+    'deepsea', 'deep sea', 'deepsee', 'dipsi', 'dipsy',
+    'gypsy', 'dip singh', 'tipsy', 'deepti', 'deepsy', 'deepc',
+]
 
 # Order matters: more specific patterns should come before broader ones.
 SITE_COMMANDS = {
@@ -50,7 +59,7 @@ SCROLL_AMOUNT = 600
 # like "karo" that show up in most Hindi commands themselves, which would
 # make confirmation trivially true by accident.
 CONFIRM_WORDS = ('haan', 'ha', 'yes', 'confirm')
-CONFIRM_TIMEOUT_SECONDS = 6
+CONFIRM_TIMEOUT_SECONDS = 8
 
 # --- Double-clap trigger (Jarvis-style), optional ---------------------------
 CLAP_ENABLED = os.getenv('CLAP_ENABLED', 'true').lower() != 'false'
@@ -75,9 +84,14 @@ def has_wake_word(text):
 def confirm_action(recognizer, mic, prompt):
     """Speaks/prints a yes-or-no prompt and blocks for one reply. Treats
     anything that isn't a clear yes, including silence or a recognition
-    failure, as "no" — a misheard command should never run by default."""
+    failure, as "no" — a misheard command should never run by default.
+
+    Beeps right before it starts listening — without ElevenLabs configured
+    there's no spoken prompt, so nothing else tells you the exact moment
+    it's ready for your "haan"."""
     print(f'-> {prompt} (bolo "haan" ya "confirm karo", {CONFIRM_TIMEOUT_SECONDS} second ke andar)')
     speak_welcome(f'{prompt} Confirm karne ke liye haan boliye.')
+    winsound.Beep(1200, 200)
     try:
         with mic as source:
             audio = recognizer.listen(source, timeout=CONFIRM_TIMEOUT_SECONDS, phrase_time_limit=3)
@@ -328,6 +342,7 @@ def main():
                 awaiting_command = False
             elif has_wake_word(text):
                 print('Ji, boliye...')
+                winsound.Beep(1500, 150)
                 awaiting_command = True
 
         except sr.WaitTimeoutError:

@@ -14,7 +14,9 @@
 - **Clicking**: "click karo" / "double click" / "right click" — mouse जहाँ है वहीं click होता है (आवाज़ से किसी specific button पर click नहीं हो सकता, mouse पहले वहाँ ले जाना होगा)
 - "scroll down" / "scroll up" बोलकर current page scroll करना
 
-**हर command confirm होता है, execute होने से पहले:** wake word ("DeepSea") ke baad jo bhi command bolo, assistant use wapas dohrayega ("Aapne bola: ... — pakka?") aur sirf tabhi karega jab tum **"haan"** ya **"confirm karo"** bologe (~6 second ke andar). Kuch aur bolo ya chup raho to wo command cancel ho jata hai, kuch nahi hota. Ye galti se — mic ne kuch aur sun liya, ya galat samjha — kisi bhi action ko rokta hai.
+**हर command confirm होता है, execute होने से पहले:** wake word ("DeepSea") ke baad jo bhi command bolo, assistant use wapas dohrayega ("Aapne bola: ... — pakka?") aur ek **beep** bajega — usi waqt bolo **"haan"** ya **"confirm karo"** (~8 second ke andar), tabhi wo command chalegi. Kuch aur bolo ya chup raho to wo command cancel ho jata hai, kuch nahi hota. Ye galti se — mic ne kuch aur sun liya, ya galat samjha — kisi bhi action ko rokta hai.
+
+**Wake word ("DeepSea") thoda alag-alag sunaayi de sakta hai** — Indian accent mein Google ka speech-to-text kabhi "Gypsy", "Tipsy", "Deepti" jaisa sun leta hai. Ye sab bhi wake word list mein add hain, isliye phir bhi kaam kar jayega — lekin best tarika hai "**Deep... Sea**" ko thoda pause ke saath, clearly, mic ke paas bolna.
 
 ## Setup (Windows)
 
