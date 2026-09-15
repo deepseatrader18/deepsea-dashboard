@@ -2,7 +2,7 @@
 // live alert channel so the user doesn't have to keep the dashboard open to
 // know when the pipeline has signed off on something.
 async function sendTelegramAlert(env, text) {
-  if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_CHAT_ID) return;
+  if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_CHAT_ID) return { ok: false, reason: 'not configured' };
   try {
     const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
       method: 'POST',
@@ -16,10 +16,14 @@ async function sendTelegramAlert(env, text) {
     });
     if (!res.ok) {
       const body = await res.text().catch(() => '');
-      console.error(`Telegram alert failed: http ${res.status}${body ? `: ${body}` : ''}`);
+      const reason = `http ${res.status}${body ? `: ${body}` : ''}`;
+      console.error(`Telegram alert failed: ${reason}`);
+      return { ok: false, reason };
     }
+    return { ok: true };
   } catch (err) {
     console.error('Telegram alert failed:', err.message);
+    return { ok: false, reason: err.message };
   }
 }
 

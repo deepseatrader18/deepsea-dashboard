@@ -109,6 +109,14 @@ app.get('/trading', requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, 'trading.html'));
 });
 
+app.get('/api/test-telegram', requireAuth, async (req, res) => {
+  if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
+    return res.status(400).json({ ok: false, reason: 'TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not configured on the server' });
+  }
+  const result = await sendTelegramAlert(ENV, '✅ DeepSea test message — if you can see this, Telegram alerts are working.');
+  res.json(result);
+});
+
 app.get('/api/status', requireAuth, async (req, res) => {
   const agents = await checkAllAgents(AGENTS);
   const mt5 = agents.find(a => a.id === 'mt5');
