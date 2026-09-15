@@ -166,11 +166,26 @@ def _resolve_lock(text, lower):
     return None
 
 
-def _resolve_sleep(text, lower):
-    if re.search(r'\bsleep\s*mode\b|\bsleep karo\b|\bso jao\b|\bsulao\b', lower):
+def _do_sleep():
+    # SetSuspendState blocks until the machine wakes back up, which — run
+    # synchronously inside the request handler — meant the HTTP response
+    # (voice's "-> Done", or the WhatsApp/dashboard confirm reply) could
+    # never be sent before the caller's own timeout gave up, making a sleep
+    # that worked perfectly look like a failure (and broke the WhatsApp
+    # bridge's browser session across the sleep/resume, confirmed live).
+    # A short delay lets that response go out first.
+    def suspend():
+        time.sleep(1.5)
         # SetSuspendState(hibernate, force, disable_wake_event) — False for
         # hibernate means Sleep/Suspend, not Hibernate.
-        return 'laptop sleep mode mein daalna', lambda: ctypes.windll.powrprof.SetSuspendState(False, True, False)
+        ctypes.windll.powrprof.SetSuspendState(False, True, False)
+
+    threading.Thread(target=suspend, daemon=True).start()
+
+
+def _resolve_sleep(text, lower):
+    if re.search(r'\bsleep\s*mode\b|\bsleep karo\b|\bso jao\b|\bsulao\b', lower):
+        return 'laptop sleep mode mein daalna', _do_sleep
     return None
 
 

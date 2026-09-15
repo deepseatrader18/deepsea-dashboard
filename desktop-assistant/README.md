@@ -172,6 +172,12 @@ WhatsApp से QR code scan करके connect होता है, WhatsApp 
 Band karne ke liye terminal mein `Ctrl+C` dabayein. Dobara chalane par QR scan nahi karna
 padega (jab tak `.wwebjs_auth` folder delete na karo).
 
+**"Sleep mode" command ke baad:** laptop ko actually sleep mein bhejne se WhatsApp
+bridge ka background browser session (jisse ye WhatsApp se connect rehta hai)
+kabhi-kabhi toot jata hai jab laptop wapas jagta hai. Agar laptop jagne ke baad
+WhatsApp se reply aana band ho jaye, bridge wali terminal window mein `Ctrl+C`
+dabakar `npm start` se dobara chala dein — QR dobara scan nahi karna padega.
+
 ### Customize (`.env` में)
 
 | Setting | क्या करता है |
