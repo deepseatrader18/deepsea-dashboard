@@ -45,8 +45,16 @@ client.on('message_create', async msg => {
   // send you.
   if (!msg.fromMe) return;
 
+  // Self-chat ("Message Yourself") detection: on older WhatsApp accounts
+  // `from` and `to` are both your own @c.us id. On newer accounts WhatsApp
+  // addresses the self-chat via a separate privacy-preserving @lid id, so
+  // `from` (@c.us) and `to` (@lid) never match — treat any @lid recipient
+  // as the self-chat too, since normal outgoing messages to real contacts
+  // are always addressed via @c.us, not @lid.
   const chatId = msg.to;
-  const isAllowedChat = ALLOWED_CHAT_ID ? chatId === ALLOWED_CHAT_ID : msg.from === msg.to;
+  const isAllowedChat = ALLOWED_CHAT_ID
+    ? chatId === ALLOWED_CHAT_ID
+    : msg.from === msg.to || (chatId && chatId.endsWith('@lid'));
   if (!isAllowedChat) {
     console.log(`[debug] chat not allowed (expected ${ALLOWED_CHAT_ID || 'from===to'}, got from=${msg.from} to=${msg.to}) — skipping`);
     return;
