@@ -353,7 +353,7 @@
     </div>
   </div>
 
-  <footer>Price, RSI, SMA/EMA, MACD, support/resistance and the trend-by-window panel are computed from real daily data. The AI Signal and Reasoning come from a chart-only pipeline — Chart Agent, Risk Manager, and General Manager — which only approves a trade if it clears a strict minimum risk:reward, otherwise it holds. News is shown for context but does not drive trade decisions. Not a guarantee, not financial advice.<br><b>DeepSea Trading Room</b></footer>
+  <footer>Price, RSI, SMA/EMA, MACD, support/resistance and the trend-by-window panel are computed from real 5-minute candle data. The AI Signal and Reasoning come from a chart-only pipeline — Chart Agent, Risk Manager, and General Manager — which only approves a trade if it clears a strict minimum risk:reward, otherwise it holds. News is shown for context but does not drive trade decisions. Not a guarantee, not financial advice.<br><b>DeepSea Trading Room</b></footer>
 
 </div>
 
@@ -390,7 +390,7 @@
     script.innerHTML = JSON.stringify({
       autosize: true,
       symbol: SYMBOL_LABELS[symbol],
-      interval: '60',
+      interval: '5',
       timezone: 'Etc/UTC',
       theme: 'dark',
       style: '1',
@@ -447,7 +447,7 @@
 
   function renderBias(technical){
     const bias = technical.data.bias || {};
-    const labels = { '5d': '5 Day', '20d': '20 Day', '50d': '50 Day', '90d': '90 Day' };
+    const labels = { '25m': '25 Min', '100m': '1h 40m', '250m': '4h 10m', '450m': '7h 30m' };
     const wrap = document.getElementById('biasRows');
     wrap.innerHTML = '';
     Object.keys(labels).forEach(key => {

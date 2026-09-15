@@ -13,8 +13,12 @@ const SYMBOL_MAP = {
   EURUSD: 'EUR/USD'
 };
 
-const CACHE_TTL_SUCCESS_MS = 15 * 60 * 1000;
-const CACHE_TTL_FAILURE_MS = 2 * 60 * 1000;
+// Candles are 5 minutes, so there's no point caching longer than one candle
+// — a new candle can't exist before then anyway. This also keeps Twelve
+// Data usage well under the free tier's 800 req/day: 1 call per symbol per
+// 5 min, worst case (page open continuously) is ~288/day per symbol.
+const CACHE_TTL_SUCCESS_MS = 5 * 60 * 1000;
+const CACHE_TTL_FAILURE_MS = 1 * 60 * 1000;
 const cache = {};
 
 function emaSeries(values, span) {
@@ -101,9 +105,9 @@ function windowBias(closes, window) {
   return 'flat';
 }
 
-async function fetchDailyOhlc(env, symbol) {
+async function fetchOhlc(env, symbol) {
   const tdSymbol = SYMBOL_MAP[symbol];
-  const url = `${TWELVE_DATA_URL}?symbol=${encodeURIComponent(tdSymbol)}&interval=1day&outputsize=100&apikey=${env.TWELVE_DATA_API_KEY}`;
+  const url = `${TWELVE_DATA_URL}?symbol=${encodeURIComponent(tdSymbol)}&interval=5min&outputsize=100&apikey=${env.TWELVE_DATA_API_KEY}`;
   const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
   const data = await res.json();
 
@@ -165,11 +169,14 @@ function analyze(symbol, rows) {
     support: round(support, 2),
     resistance: round(resistance, 2),
     trend,
+    // Keys name the actual lookback at 5-minute candles (5/20/50/90 bars),
+    // not calendar days — this used to be daily bars, hence the old "Nd"
+    // naming; keep it accurate now that the timeframe changed.
     bias: {
-      '5d': n >= 6 ? windowBias(closes, 5) : 'unknown',
-      '20d': n >= 21 ? windowBias(closes, 20) : 'unknown',
-      '50d': n >= 51 ? windowBias(closes, 50) : 'unknown',
-      '90d': n >= 91 ? windowBias(closes, 90) : 'unknown'
+      '25m': n >= 6 ? windowBias(closes, 5) : 'unknown',
+      '100m': n >= 21 ? windowBias(closes, 20) : 'unknown',
+      '250m': n >= 51 ? windowBias(closes, 50) : 'unknown',
+      '450m': n >= 91 ? windowBias(closes, 90) : 'unknown'
     },
     dataPoints: n,
     asOf: new Date().toISOString()
@@ -177,7 +184,7 @@ function analyze(symbol, rows) {
 }
 
 async function getFreshTechnical(env, symbol) {
-  const rows = await fetchDailyOhlc(env, symbol);
+  const rows = await fetchOhlc(env, symbol);
   if (rows.length < 2) throw new Error('Not enough market data returned');
   return analyze(symbol, rows);
 }
