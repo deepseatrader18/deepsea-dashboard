@@ -338,7 +338,11 @@ async function buildDeepSeaReply(userText, channel = 'voice') {
         Authorization: `Bearer ${GROQ_API_KEY}`
       },
       body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
+        // llama-3.3-70b-versatile was decommissioned by Groq (confirmed
+        // live via a model_not_found error) — openai/gpt-oss-120b is
+        // Groq's current recommended replacement, free tier ~1000
+        // requests/day, far above what this assistant needs.
+        model: 'openai/gpt-oss-120b',
         messages: [
           { role: 'system', content: systemInstruction },
           { role: 'user', content: userText }
