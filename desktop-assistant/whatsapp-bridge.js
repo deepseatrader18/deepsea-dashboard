@@ -16,6 +16,24 @@ const REMOTE_CONFIRM_WINDOW_MS = 60000;
 // instead of the mic.
 let pendingCommand = null;
 
+// This is a self-bot in a self-chat, so every message the bridge itself
+// sends (the "pakka?" prompt, "Ho gaya: ...", etc.) comes back through
+// message_create exactly like a real reply from you would — fromMe is
+// true for both. Without this, the bridge would read its own "pakka?"
+// prompt as your answer and immediately cancel the command before you
+// ever get to reply. sendAndTrack() remembers each outgoing message's id
+// so the handler below can recognize and skip them.
+const ownSentIds = new Set();
+async function sendAndTrack(to, text) {
+  const sent = await client.sendMessage(to, text);
+  const id = sent && sent.id && sent.id._serialized;
+  if (id) {
+    ownSentIds.add(id);
+    setTimeout(() => ownSentIds.delete(id), 5 * 60 * 1000);
+  }
+  return sent;
+}
+
 if (!BRIDGE_TOKEN) {
   console.error('WHATSAPP_BRIDGE_TOKEN not set in .env — see .env.example. The same value must also be set as an env var on the deepsea-dashboard Render service.');
   process.exit(1);
@@ -47,6 +65,12 @@ client.on('disconnected', reason => console.error('WhatsApp disconnected:', reas
 
 client.on('message_create', async msg => {
   console.log(`[debug] message_create: fromMe=${msg.fromMe} from=${msg.from} to=${msg.to} body="${msg.body}"`);
+
+  // Skip messages the bridge itself just sent (see ownSentIds above) —
+  // otherwise its own prompts and replies loop back in as if you'd typed them.
+  if (msg.id && msg.id._serialized && ownSentIds.has(msg.id._serialized)) {
+    return;
+  }
 
   // Only react to messages you send yourself (fromMe) into the allowed
   // chat, so no one else — in any other chat, including ones that message
@@ -81,7 +105,7 @@ client.on('message_create', async msg => {
     const isConfirm = CONFIRM_WORDS.some(w => lower === w || lower.startsWith(w + ' '));
     if (!isConfirm) {
       console.log(`[debug] pending command cancelled by reply: "${body}"`);
-      await client.sendMessage(msg.to, `Cancelled: ${pending.description}`);
+      await sendAndTrack(msg.to, `Cancelled: ${pending.description}`);
       return;
     }
     try {
@@ -91,10 +115,10 @@ client.on('message_create', async msg => {
         signal: AbortSignal.timeout(15000)
       });
       const data = await res.json();
-      await client.sendMessage(msg.to, data.ok ? `Ho gaya: ${data.description}` : `Cancelled (time out ho gaya): ${pending.description}`);
+      await sendAndTrack(msg.to, data.ok ? `Ho gaya: ${data.description}` : `Cancelled (time out ho gaya): ${pending.description}`);
     } catch (err) {
       console.error('Confirm request to local assistant failed:', err.message);
-      await client.sendMessage(msg.to, 'Laptop assistant se connect nahi ho paaya — check karo ki python assistant.py laptop par chal raha hai.');
+      await sendAndTrack(msg.to, 'Laptop assistant se connect nahi ho paaya — check karo ki python assistant.py laptop par chal raha hai.');
     }
     return;
   }
@@ -122,7 +146,7 @@ client.on('message_create', async msg => {
       const data = await res.json();
       if (data.matched) {
         pendingCommand = { description: data.description, expiresAt: Date.now() + REMOTE_CONFIRM_WINDOW_MS };
-        await client.sendMessage(msg.to, `Aapne bola: "${commandText}". ${data.description} — pakka? 60 second ke andar "haan" likho.`);
+        await sendAndTrack(msg.to, `Aapne bola: "${commandText}". ${data.description} — pakka? 60 second ke andar "haan" likho.`);
         return;
       }
     }
@@ -130,7 +154,7 @@ client.on('message_create', async msg => {
     console.log(`[debug] local assistant not reachable (${err.message}) — falling back to dashboard chat`);
   }
 
-  // client.sendMessage(chatId, text) instead of msg.getChat() + chat.sendMessage():
+  // sendAndTrack(chatId, text) instead of msg.getChat() + chat.sendMessage():
   // getChatById() throws on @lid-addressed chats on this whatsapp-web.js
   // version (confirmed by the crash in Client.getChatById), and since that
   // crash happened outside any try/catch it took the whole process down —
@@ -145,11 +169,11 @@ client.on('message_create', async msg => {
       signal: AbortSignal.timeout(30000)
     });
     const data = await res.json();
-    await client.sendMessage(msg.to, data.reply || data.error || 'DeepSea se reply nahi mil paya.');
+    await sendAndTrack(msg.to, data.reply || data.error || 'DeepSea se reply nahi mil paya.');
   } catch (err) {
     console.error('Bridge request failed:', err.message);
     try {
-      await client.sendMessage(msg.to, 'DeepSea abhi available nahi hai, thodi der mein try karo.');
+      await sendAndTrack(msg.to, 'DeepSea abhi available nahi hai, thodi der mein try karo.');
     } catch (sendErr) {
       console.error('Could not even send the error reply:', sendErr.message);
     }
