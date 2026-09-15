@@ -79,8 +79,10 @@ CLAP_MIN_GAP_SECONDS = 0.05
 CLAP_SAMPLE_RATE = 16000
 CLAP_BLOCK_SIZE = 512
 
-ELEVENLABS_API_KEY = os.getenv('ELEVENLABS_API_KEY', '')
-ELEVENLABS_VOICE_ID = os.getenv('ELEVENLABS_VOICE_ID', '')
+# Edge TTS voice name — full list: run `edge-tts --list-voices` after
+# installing, or pick another from https://github.com/rany2/edge-tts.
+# Default is a natural Indian-English voice that also handles Hindi words.
+EDGE_TTS_VOICE = os.getenv('EDGE_TTS_VOICE', 'en-IN-NeerjaNeural')
 
 
 def has_wake_word(text):
@@ -93,9 +95,8 @@ def confirm_action(recognizer, mic, prompt):
     anything that isn't a clear yes, including silence or a recognition
     failure, as "no" — a misheard command should never run by default.
 
-    Beeps right before it starts listening — without ElevenLabs configured
-    there's no spoken prompt, so nothing else tells you the exact moment
-    it's ready for your "haan"."""
+    Beeps right before it starts listening, so there's always a clear cue
+    for the exact moment it's ready for your "haan"."""
     print(f'-> {prompt} (bolo "haan" ya "confirm karo", {CONFIRM_TIMEOUT_SECONDS} second ke andar)')
     speak_welcome(f'{prompt} Confirm karne ke liye haan boliye.')
     winsound.Beep(1200, 200)
@@ -249,25 +250,30 @@ def handle_command(text, recognizer, mic):
 
 
 def speak_welcome(text):
-    if not ELEVENLABS_API_KEY or not ELEVENLABS_VOICE_ID:
-        print('-> ElevenLabs voice skipped (ELEVENLABS_API_KEY / ELEVENLABS_VOICE_ID not set in .env)')
-        return
+    # Microsoft Edge's free neural text-to-speech (no API key, no signup,
+    # no usage limit) — switched from ElevenLabs because its free tier
+    # blocks all voices ("Free users cannot use library voices via the API").
     try:
-        from elevenlabs.client import ElevenLabs
+        import asyncio
+        import tempfile
 
-        client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
-        audio = client.text_to_speech.convert(
-            voice_id=ELEVENLABS_VOICE_ID,
-            model_id='eleven_multilingual_v2',
-            output_format='pcm_24000',
-            text=text,
-        )
-        pcm_bytes = b''.join(audio)
-        samples = np.frombuffer(pcm_bytes, dtype=np.int16)
-        sd.play(samples, samplerate=24000)
-        sd.wait()
+        import edge_tts
+        from playsound import playsound
+
+        async def _generate():
+            communicate = edge_tts.Communicate(text, voice=EDGE_TTS_VOICE)
+            with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as f:
+                path = f.name
+            await communicate.save(path)
+            return path
+
+        mp3_path = asyncio.run(_generate())
+        try:
+            playsound(mp3_path)
+        finally:
+            os.remove(mp3_path)
     except Exception as exc:
-        print(f'-> ElevenLabs voice failed: {exc}')
+        print(f'-> Voice failed: {exc}')
 
 
 def handle_double_clap():

@@ -54,34 +54,36 @@
 ## Double-clap trigger + welcome voice (optional, Jarvis-style)
 
 Wake word वाले feature के अलावा, अब एक double-clap trigger भी है: दो बार जल्दी-जल्दी ताली बजाओ तो
-Spotify (अगर set किया हो), DeepSea dashboard browser में खुलता है, और ElevenLabs की आवाज़ में एक welcome
-line बोली जाती है। यह हर terminal session में सिर्फ एक बार चलता है — दोबारा चलाने के लिए `Ctrl+C` करके
-फिर से `python assistant.py` run करें।
+Spotify (अगर set किया हो), DeepSea dashboard browser में खुलता है, और Microsoft Edge की free आवाज़ में एक
+welcome line बोली जाती है (साथ ही हर command confirm करते वक़्त भी यही आवाज़ बोलती है)। यह हर terminal
+session में सिर्फ एक बार चलता है — दोबारा चलाने के लिए `Ctrl+C` करके फिर से `python assistant.py` run करें।
+
+आवाज़ के लिए **Microsoft Edge TTS** (`edge-tts`) इस्तेमाल होता है — बिल्कुल free, unlimited, कोई API key
+या signup नहीं चाहिए (ElevenLabs से switch किया गया क्योंकि उसका free plan API से हर voice block कर देता है)।
 
 ### Setup
 
-1. `requirements.txt` दोबारा install करें (नई libraries आई हैं: `numpy`, `sounddevice`, `elevenlabs`, `python-dotenv`):
+1. `requirements.txt` दोबारा install करें (नई libraries आई हैं: `numpy`, `sounddevice`, `edge-tts`, `playsound`, `python-dotenv`):
    ```
    pip install -r requirements.txt
    ```
-2. [ElevenLabs](https://elevenlabs.io) पर account बनाएं (free भी चलेगा), फिर:
-   - **API key:** Developers → API Keys → Create Key
-   - **Voice ID:** Voices → अपनी पसंद की voice खोलें → Copy Voice ID
-3. `desktop-assistant` folder में `.env.example` की copy बनाकर नाम `.env` रखें, और अपनी असली values भरें:
+2. Kuch aur karne ki zaroorat nahi — koi account ya API key nahi chahiye, ye seedha chalega.
+3. (Optional) Agar voice badalni ho, `desktop-assistant` folder में `.env.example` की copy बनाकर नाम `.env` रखें:
    ```
    cp .env.example .env
    ```
-   **Warning:** `.env` file कभी commit या share मत करें, इसमें आपकी private API key है (यह पहले से `.gitignore` में है)।
+   और `EDGE_TTS_VOICE` line में koi doosra voice naam daal do (list dekhne ke liye `edge-tts --list-voices` chalao).
 4. `python assistant.py` फिर से चलाएं। Terminal में "Listening for a double clap..." दिखेगा।
 
 ### Customize (`.env` में, code बदले बिना)
 
 | Setting | क्या करता है |
 | --- | --- |
+| `EDGE_TTS_VOICE` | कौन सी आवाज़ बोलेगी (default `en-IN-NeerjaNeural`) — list ke liye `edge-tts --list-voices` |
 | `CLAP_ENABLED` | `false` करने पर clap-trigger पूरी तरह बंद हो जाता है (default `true`) |
 | `CLAP_SONG_URI` | Clap पर खुलने वाला Spotify/YouTube link (खाली छोड़ने पर कुछ नहीं खुलता) |
 | `CLAP_DASHBOARD_URL` | Clap पर browser में कौन सा URL खुले (default DeepSea dashboard) |
-| `CLAP_WELCOME_PHRASE` | ElevenLabs जो line बोलेगा |
+| `CLAP_WELCOME_PHRASE` | Edge TTS जो line बोलेगा |
 | `CLAP_SPIKE_RATIO` | कम = ताली पकड़ना आसान, ज़्यादा = false trigger कम (default `6.0`) |
 
 ### Troubleshooting
@@ -89,7 +91,7 @@ line बोली जाती है। यह हर terminal session मे�
 | Problem | Fix |
 | --- | --- |
 | Claps पर कुछ नहीं होता | Mic के पास से ताली बजाएं, `CLAP_SPIKE_RATIO` थोड़ा कम करें (जैसे `6.0` से `4.0`) |
-| Welcome voice नहीं बोलता | `.env` में `ELEVENLABS_API_KEY` और `ELEVENLABS_VOICE_ID` सही check करें, terminal restart करें |
+| Welcome voice नहीं बोलता | Internet connection check करें (edge-tts को internet चाहिए), terminal restart करें |
 | "Clap listener disabled" दिखे | Mic किसी और app में exclusive mode में इस्तेमाल हो रहा है, वो app बंद करके फिर से try करें |
 
 ## WhatsApp bridge (optional) — फोन से DeepSea से बात करना
