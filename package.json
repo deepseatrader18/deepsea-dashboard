@@ -10,6 +10,7 @@
     "express": "^4.19.2",
     "express-session": "^1.18.0",
     "imapflow": "^1.0.161",
-    "ioredis": "^5.4.1"
+    "ioredis": "^5.4.1",
+    "msedge-tts": "^2.0.7"
   }
 }

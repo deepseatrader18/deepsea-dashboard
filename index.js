@@ -7,6 +7,7 @@ const { getTechnicalAnalysis } = require('./trading/technical');
 const { runTradingPipeline } = require('./trading/pipeline');
 const { sendTelegramAlert, formatTradeAlert } = require('./trading/telegramAlert');
 const { recordTrade, checkOpenTrades, getTradeLog } = require('./trading/tradeJournal');
+const { MsEdgeTTS, OUTPUT_FORMAT } = require('msedge-tts');
 const app = express();
 
 app.use(express.urlencoded({ extended: true }));
@@ -118,6 +119,31 @@ app.get('/api/test-telegram', requireAuth, async (req, res) => {
   }
   const result = await sendTelegramAlert(ENV, '✅ DeepSea test message — if you can see this, Telegram alerts are working.');
   res.json(result);
+});
+
+// Free, lifetime, neural-quality TTS (same voices as Azure Cognitive
+// Services) via Microsoft Edge's Read Aloud service — no API key, no usage
+// cost. Replaces the browser's robotic built-in speechSynthesis voice for
+// DeepSea's spoken replies.
+const TTS_VOICE = 'hi-IN-SwaraNeural';
+
+app.post('/api/speak', requireAuth, async (req, res) => {
+  const text = (req.body && req.body.text || '').trim();
+  if (!text) return res.status(400).json({ error: 'No text provided' });
+  try {
+    const tts = new MsEdgeTTS();
+    await tts.setMetadata(TTS_VOICE, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
+    const { audioStream } = tts.toStream(text);
+    res.setHeader('Content-Type', 'audio/mpeg');
+    audioStream.on('error', err => {
+      console.error('TTS stream error:', err.message);
+      if (!res.headersSent) res.status(502).end();
+    });
+    audioStream.pipe(res);
+  } catch (err) {
+    console.error('TTS setup error:', err.message);
+    res.status(502).json({ error: 'TTS unavailable' });
+  }
 });
 
 app.get('/api/trades', requireAuth, async (req, res) => {

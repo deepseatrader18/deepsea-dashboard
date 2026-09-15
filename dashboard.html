@@ -538,10 +538,9 @@
 
   let isSpeaking = false;
   let shouldBeListening = true;
+  let currentAudio = null;
 
-  function speak(text){
-    isSpeaking = true;
-    try { recognition.stop(); } catch(e){}
+  function speakWithBrowserVoice(text){
     const utter = new SpeechSynthesisUtterance(text);
     utter.lang = 'hi-IN';
     utter.rate = 1;
@@ -551,6 +550,43 @@
       startListening();
     };
     window.speechSynthesis.speak(utter);
+  }
+
+  // Neural-quality free TTS (Microsoft Edge voices) instead of the
+  // browser's built-in robotic speechSynthesis. Falls back to the browser
+  // voice if the server-side TTS request fails, so replies are never
+  // silent.
+  async function speak(text){
+    isSpeaking = true;
+    try { recognition.stop(); } catch(e){}
+    if (currentAudio) { currentAudio.pause(); URL.revokeObjectURL(currentAudio.src); currentAudio = null; }
+    try {
+      const res = await fetch('/api/speak', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text })
+      });
+      if (!res.ok) throw new Error('TTS request failed: ' + res.status);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      currentAudio = new Audio(url);
+      currentAudio.onended = () => {
+        isSpeaking = false;
+        URL.revokeObjectURL(url);
+        currentAudio = null;
+        startListening();
+      };
+      currentAudio.onerror = () => {
+        isSpeaking = false;
+        URL.revokeObjectURL(url);
+        currentAudio = null;
+        startListening();
+      };
+      await currentAudio.play();
+    } catch (err) {
+      console.error('Neural TTS failed, falling back to browser voice:', err);
+      speakWithBrowserVoice(text);
+    }
   }
 
   function hasWakeWord(text){
