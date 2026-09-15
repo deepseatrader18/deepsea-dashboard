@@ -4,11 +4,10 @@
 // risk policy before a trade is ever shown to the user.
 //
 // Risk policy (set by the account owner, not a default):
+//  - Direction comes only from the Chart Agent's technical bias — news is
+//    not used to decide or size trades.
 //  - Minimum risk:reward is 1:3. A trade that can't clear that bar is never
 //    approved — it comes back as "hold" instead.
-//  - When the News Agent and Chart Agent disagree on direction, News wins
-//    (news is the priority signal for this account), but the disagreement
-//    caps confidence so a "high" call never survives a real conflict.
 const MIN_RISK_REWARD = 3;
 // Stop-loss distance = ATR14 * ATR_MULTIPLIER (a standard volatility-scaled
 // stop), floored so it's never a fraction of a normal day's range and
@@ -36,36 +35,20 @@ function holdResult({ technical, holdReason }) {
       takeProfit: null,
       support: t.support ?? null,
       resistance: t.resistance ?? null,
-      directionSource: null,
-      conflict: false,
       riskRewardRatio: null
     },
     holdReason
   };
 }
 
-function evaluateRisk({ technical, newsAgent, chartAgent }) {
+function evaluateRisk({ technical, chartAgent }) {
   if (!technical.available) {
     return { available: false, reason: 'Technical data not available — cannot size a trade' };
   }
 
-  const newsDirection = biasToDirection(newsAgent.data.bias);
-  const chartDirection = biasToDirection(chartAgent.data.bias);
-
-  const conflict = Boolean(newsDirection && chartDirection && newsDirection !== chartDirection);
-
-  let direction = null;
-  let directionSource = null;
-  if (newsDirection) {
-    direction = newsDirection;
-    directionSource = 'news';
-  } else if (chartDirection) {
-    direction = chartDirection;
-    directionSource = 'chart';
-  }
-
+  const direction = biasToDirection(chartAgent.data.bias);
   if (!direction) {
-    return holdResult({ technical, holdReason: 'Neither News Agent nor Chart Agent shows a clear directional bias' });
+    return holdResult({ technical, holdReason: 'Chart Agent shows no clear directional bias' });
   }
 
   const t = technical.data;
@@ -103,9 +86,8 @@ function evaluateRisk({ technical, newsAgent, chartAgent }) {
   const reward = risk * MIN_RISK_REWARD;
   const takeProfit = direction === 'buy' ? price + reward : price - reward;
 
-  let confidence = directionSource === 'news' ? newsAgent.data.confidence : chartAgent.data.confidence;
+  let confidence = chartAgent.data.confidence;
   if (!['low', 'medium', 'high'].includes(confidence)) confidence = 'low';
-  if (conflict && confidence === 'high') confidence = 'medium';
 
   return {
     available: true,
@@ -117,8 +99,6 @@ function evaluateRisk({ technical, newsAgent, chartAgent }) {
       takeProfit: Number(takeProfit.toFixed(2)),
       support: t.support ?? null,
       resistance: t.resistance ?? null,
-      directionSource,
-      conflict,
       riskRewardRatio: MIN_RISK_REWARD
     }
   };

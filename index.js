@@ -146,9 +146,9 @@ app.get('/api/nexus', requireAuth, async (req, res) => {
     let plan = { available: false, reason: 'not requested' };
     let agents = null;
     if (technical.available) {
-      const pipeline = await runTradingPipeline(ENV, { symbol, news, technical });
+      const pipeline = await runTradingPipeline(ENV, { symbol, technical });
       plan = pipeline.plan;
-      agents = { news: pipeline.newsAgent, chart: pipeline.chartAgent, risk: pipeline.risk };
+      agents = { chart: pipeline.chartAgent, risk: pipeline.risk };
       maybeSendTradeAlert(symbol, plan);
     }
 
@@ -188,11 +188,8 @@ app.post('/api/chat', requireAuth, async (req, res) => {
 
     const symbol = detectSymbol(userText);
     if (symbol && isTradePlanRequest(userText)) {
-      const [news, technical] = await Promise.all([
-        getForexFactoryNews(ENV),
-        getTechnicalAnalysis(ENV, symbol)
-      ]);
-      const { plan } = await runTradingPipeline(ENV, { symbol, news, technical });
+      const technical = await getTechnicalAnalysis(ENV, symbol);
+      const { plan } = await runTradingPipeline(ENV, { symbol, technical });
       contextText += plan.available
         ? ` Trade plan for ${symbol} — action: ${plan.data.action}, confidence: ${plan.data.confidence}, entry: ${plan.data.entry}, stop-loss: ${plan.data.stopLoss}, take-profit: ${plan.data.takeProfit}, support: ${plan.data.support}, resistance: ${plan.data.resistance}. Reasoning: ${plan.data.reasoning}. The user trades manually, so clearly state the action, entry, stop-loss, and take-profit levels — they will place the trade themselves. Never guess or make up trading levels.`
         : ` A trade plan for ${symbol} was requested but is not available right now (${plan.reason}). Tell the user honestly that trading data isn't available, don't make up a plan.`;

@@ -162,8 +162,8 @@
   .bias-row .lbl{color:var(--text-dim);}
   .bias-badge{font-size:9.5px;font-weight:700;letter-spacing:.05em;padding:3px 9px;border-radius:5px;}
 
-  .office-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;}
-  @media (max-width:980px){.office-grid{grid-template-columns:repeat(2,1fr);}}
+  .office-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;}
+  @media (max-width:820px){.office-grid{grid-template-columns:1fr 1fr;}}
   @media (max-width:560px){.office-grid{grid-template-columns:1fr;}}
 
   .cabin{position:relative;border:1px solid var(--border);border-radius:12px;
@@ -333,11 +333,6 @@
         <div class="panel-title"><span class="dot" style="background:var(--accent)"></span>Trading Floor — The Team</div>
       </div>
       <div class="office-grid" id="officeGrid">
-        <div class="cabin news">
-          <div class="cabin-header"><div><div class="cabin-role">News Desk</div><div class="cabin-name">News Agent</div></div><span class="cabin-status-dot" style="background:#7688a8"></span></div>
-          <div class="cabin-desk">📰</div>
-          <div class="cabin-status-text">Assembling…</div>
-        </div>
         <div class="cabin chart">
           <div class="cabin-header"><div><div class="cabin-role">Charting Desk</div><div class="cabin-name">Chart Agent</div></div><span class="cabin-status-dot" style="background:#7688a8"></span></div>
           <div class="cabin-desk">📊</div>
@@ -357,7 +352,7 @@
     </div>
   </div>
 
-  <footer>Price, RSI, SMA/EMA, MACD, support/resistance and the trend-by-window panel are computed from real daily data. The AI Signal and Reasoning come from a 4-agent pipeline — News Agent, Chart Agent, Risk Manager, and General Manager — which only approves a trade if it clears a strict minimum risk:reward, otherwise it holds. Not a guarantee, not financial advice.<br><b>DeepSea Trading Room</b></footer>
+  <footer>Price, RSI, SMA/EMA, MACD, support/resistance and the trend-by-window panel are computed from real daily data. The AI Signal and Reasoning come from a chart-only pipeline — Chart Agent, Risk Manager, and General Manager — which only approves a trade if it clears a strict minimum risk:reward, otherwise it holds. News is shown for context but does not drive trade decisions. Not a guarantee, not financial advice.<br><b>DeepSea Trading Room</b></footer>
 
 </div>
 
@@ -513,32 +508,27 @@
       return;
     }
 
-    const news = agents.news, chart = agents.chart, risk = agents.risk;
+    const chart = agents.chart, risk = agents.risk;
     const cabins = grid.querySelectorAll('.cabin');
 
-    const newsDot = cabins[0].querySelector('.cabin-status-dot');
-    newsDot.style.background = biasColor(news.data.bias);
-    cabins[0].querySelector('.cabin-status-text').innerHTML =
-      `Bias: <b>${news.data.bias.toUpperCase()}</b> (${news.data.confidence})<br>${news.data.summary || ''}`;
-
-    const chartDot = cabins[1].querySelector('.cabin-status-dot');
+    const chartDot = cabins[0].querySelector('.cabin-status-dot');
     chartDot.style.background = biasColor(chart.data.bias);
-    cabins[1].querySelector('.cabin-status-text').innerHTML =
+    cabins[0].querySelector('.cabin-status-text').innerHTML =
       `Bias: <b>${chart.data.bias.toUpperCase()}</b> (${chart.data.confidence})<br>${chart.data.summary || ''}`;
 
-    const riskDot = cabins[2].querySelector('.cabin-status-dot');
+    const riskDot = cabins[1].querySelector('.cabin-status-dot');
     const riskApproved = risk.available && risk.data.action !== 'hold';
     riskDot.style.background = riskApproved ? '#2fdb96' : '#ffb648';
-    cabins[2].querySelector('.cabin-status-text').innerHTML = risk.available
+    cabins[1].querySelector('.cabin-status-text').innerHTML = risk.available
       ? (riskApproved
-          ? `Approved — ATR-sized stop, R:R locked <b>1:${risk.data.riskRewardRatio}</b>${risk.data.conflict ? '<br>(News overrode a conflicting Chart signal)' : ''}`
+          ? `Approved — ATR-sized stop, R:R locked <b>1:${risk.data.riskRewardRatio}</b>`
           : `Trade <b>REJECTED</b> — ${risk.holdReason || 'risk:reward not met'}`)
       : 'Waiting on technical data…';
 
-    const mgrDot = cabins[3].querySelector('.cabin-status-dot');
+    const mgrDot = cabins[2].querySelector('.cabin-status-dot');
     const mgrColor = plan.available ? (plan.data.action === 'buy' ? '#2fdb96' : plan.data.action === 'sell' ? '#ff4d6d' : '#7688a8') : '#7688a8';
     mgrDot.style.background = mgrColor;
-    cabins[3].querySelector('.cabin-status-text').innerHTML = plan.available
+    cabins[2].querySelector('.cabin-status-text').innerHTML = plan.available
       ? `Final call: <b>${plan.data.action.toUpperCase()}</b> (${plan.data.confidence})<br>Signed off and sent to the dashboard.`
       : 'No plan yet.';
   }

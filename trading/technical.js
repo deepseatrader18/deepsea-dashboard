@@ -33,8 +33,11 @@ function sma(values, period) {
   return window.reduce((a, b) => a + b, 0) / period;
 }
 
-// Matches the previous Python implementation: a simple rolling mean of
-// gains/losses over the last `period` daily changes (not Wilder smoothing).
+// Wilder's smoothing (the standard used by MT5/TradingView/every broker
+// platform, not a plain rolling mean): seed with a simple average of the
+// first `period` gains/losses, then recursively smooth through the rest of
+// the history. A plain rolling-mean RSI gives noticeably different numbers
+// from what a trader sees on their own chart.
 function computeRSI(closes, period = 14) {
   if (closes.length < period + 1) return null;
   const gains = [];
@@ -44,10 +47,12 @@ function computeRSI(closes, period = 14) {
     gains.push(Math.max(diff, 0));
     losses.push(Math.max(-diff, 0));
   }
-  const lastGains = gains.slice(-period);
-  const lastLosses = losses.slice(-period);
-  const avgGain = lastGains.reduce((a, b) => a + b, 0) / period;
-  const avgLoss = lastLosses.reduce((a, b) => a + b, 0) / period;
+  let avgGain = gains.slice(0, period).reduce((a, b) => a + b, 0) / period;
+  let avgLoss = losses.slice(0, period).reduce((a, b) => a + b, 0) / period;
+  for (let i = period; i < gains.length; i++) {
+    avgGain = (avgGain * (period - 1) + gains[i]) / period;
+    avgLoss = (avgLoss * (period - 1) + losses[i]) / period;
+  }
   if (avgLoss === 0) return avgGain === 0 ? 50 : 100;
   const rs = avgGain / avgLoss;
   return 100 - 100 / (1 + rs);
@@ -63,8 +68,11 @@ function computeMACDHistogram(closes) {
   return macdLine[n - 1] - signalLine[n - 1];
 }
 
-// Simple rolling mean of true range over the last `period` days (matches
-// the previous Python implementation, not Wilder smoothing).
+// Wilder's smoothing (same method as RSI above, and what MT5/TradingView
+// use for ATR by default): seed with a simple average of the first
+// `period` true ranges, then recursively smooth through the rest of the
+// history. This directly feeds the Risk Manager's stop-loss distance, so
+// matching the standard method matters for the sizes to look right.
 function computeATR(highs, lows, closes, period = 14) {
   const n = closes.length;
   if (n < period) return null;
@@ -76,8 +84,11 @@ function computeATR(highs, lows, closes, period = 14) {
       tr.push(Math.max(highs[i] - lows[i], Math.abs(highs[i] - closes[i - 1]), Math.abs(lows[i] - closes[i - 1])));
     }
   }
-  const lastWindow = tr.slice(-period);
-  return lastWindow.reduce((a, b) => a + b, 0) / period;
+  let atr = tr.slice(0, period).reduce((a, b) => a + b, 0) / period;
+  for (let i = period; i < tr.length; i++) {
+    atr = (atr * (period - 1) + tr[i]) / period;
+  }
+  return atr;
 }
 
 function windowBias(closes, window) {
