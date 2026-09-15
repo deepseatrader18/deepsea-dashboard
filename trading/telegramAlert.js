@@ -23,16 +23,25 @@ async function sendTelegramAlert(env, text) {
   }
 }
 
+// The reasoning text is agent-generated and can contain things like
+// "EMA9 <= EMA50" — with parse_mode HTML, a bare "<" is read as the start
+// of a tag, so Telegram rejects the whole message (400: can't parse
+// entities). Escape any dynamic text before it goes into the HTML message;
+// the literal <b> tags below are ours, not escaped.
+function escapeHtml(text) {
+  return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 function formatTradeAlert(symbol, plan) {
   const d = plan.data;
   return (
     `🚨 <b>DeepSea Trade Signal</b>\n\n` +
-    `<b>${symbol}</b> — <b>${d.action.toUpperCase()}</b> (${d.confidence} confidence)\n\n` +
+    `<b>${escapeHtml(symbol)}</b> — <b>${escapeHtml(d.action.toUpperCase())}</b> (${escapeHtml(d.confidence)} confidence)\n\n` +
     `Entry: ${d.entry}\n` +
     `Stop-Loss: ${d.stopLoss}\n` +
     `Take-Profit: ${d.takeProfit}\n` +
     `Risk:Reward — locked at 1:${plan.data.riskRewardRatio || 3}\n\n` +
-    `${d.reasoning}`
+    `${escapeHtml(d.reasoning)}`
   );
 }
 
