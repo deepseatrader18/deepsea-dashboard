@@ -34,6 +34,7 @@ const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 const REDIS_URL = process.env.REDIS_URL;
 const TRADING_AGENTS_SERVICE_URL = process.env.TRADING_AGENTS_SERVICE_URL;
 const TRADING_AGENTS_SERVICE_TOKEN = process.env.TRADING_AGENTS_SERVICE_TOKEN;
+const WHATSAPP_BRIDGE_TOKEN = process.env.WHATSAPP_BRIDGE_TOKEN;
 
 const ENV = {
   VPS_STATUS_URL, VPS_STATUS_KEY, GMAIL_USER, GMAIL_APP_PASSWORD,
@@ -278,78 +279,113 @@ app.get('/api/deep-analysis/:jobId', requireAuth, async (req, res) => {
   }
 });
 
+// Shared by /api/chat (dashboard mic, spoken reply) and /api/bridge/chat
+// (WhatsApp bridge, texted reply) so both surfaces get the same DeepSea
+// persona and real trade-plan/Gmail context instead of two copies drifting
+// apart. `channel` only tweaks the one line about how the reply is consumed.
+async function buildDeepSeaReply(userText, channel = 'voice') {
+  if (!GEMINI_API_KEY) {
+    throw new Error('GEMINI_API_KEY not set on server');
+  }
+
+  let contextText = '';
+
+  if (isEmailRequest(userText)) {
+    const [gmail] = await checkAllAgents(AGENTS.filter(a => a.id === 'gmail'));
+    contextText += gmail.connected
+      ? (gmail.data.unreadCount > 0
+          ? ` Gmail inbox: ${gmail.data.unreadCount} unread email(s). Most recent unread is from ${gmail.data.latest.from}, subject: "${gmail.data.latest.subject}". Use this real data — never guess or make up email content.`
+          : ' Gmail inbox: no unread emails.')
+      : ' Gmail data is not available right now — tell the user honestly instead of guessing.';
+  }
+
+  const symbol = detectSymbol(userText);
+  if (symbol && isTradePlanRequest(userText)) {
+    const technical = await getTechnicalAnalysis(ENV, symbol);
+    const { plan } = await runTradingPipeline(ENV, { symbol, technical });
+    contextText += plan.available
+      ? ` Trade plan for ${symbol} — action: ${plan.data.action}, confidence: ${plan.data.confidence}, entry: ${plan.data.entry}, stop-loss: ${plan.data.stopLoss}, take-profit: ${plan.data.takeProfit}, support: ${plan.data.support}, resistance: ${plan.data.resistance}. Reasoning: ${plan.data.reasoning}. The user trades manually, so clearly state the action, entry, stop-loss, and take-profit levels — they will place the trade themselves. Never guess or make up trading levels.`
+      : ` A trade plan for ${symbol} was requested but is not available right now (${plan.reason}). Tell the user honestly that trading data isn't available, don't make up a plan.`;
+  }
+
+  const outputLine = channel === 'whatsapp'
+    ? "Keep replies short (1-3 sentences) and to the point. Never use markdown formatting, asterisks, or bullet points — this is a plain WhatsApp text message."
+    : "Keep replies short (1-3 sentences), spoken-friendly, and to the point. Never use markdown formatting, asterisks, or bullet points, since your reply is read aloud.";
+
+  const systemInstruction =
+    "You are DeepSea, a calm and confident female AI assistant helping run a personal trading and automation system. " +
+    "Always use feminine Hindi verb forms for yourself (करती हूँ, कर रही हूँ, खोल रही हूँ — never the masculine रहा/करता). " +
+    "Always address the user as \"बॉस\" (Boss). When the user gives you a command or asks you to do something, acknowledge it immediately in the flow of your reply — e.g. \"हाँ बॉस, अभी करती हूँ\" or \"बॉस, मैं ... कर रही हूँ\" — rather than a flat statement with no acknowledgment. " +
+    "You do not manage or discuss the user's MT5 trading account — they trade manually and handle MT5 themselves, so never bring up MT5, balance, equity, or positions unless the user explicitly asks about MT5. " +
+    "Always reply in Hindi (Devanagari script), even if the user speaks in English or Hinglish. " +
+    "You cannot open apps, websites, or files, click anything, or control the browser — you can only talk. The dashboard itself already handles opening YouTube, Gmail, WhatsApp, and Instagram directly, without asking you. If the user asks you to open, click, or launch something else you have no way to do, say plainly that you can't do that yourself, instead of pretending you did it. " +
+    `${contextText} ` +
+    "Only talk about topics the user actually asked about — don't mix in unrelated data. " +
+    outputLine;
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${GEMINI_API_KEY}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: systemInstruction }] },
+        contents: [{ role: 'user', parts: [{ text: userText }] }]
+      })
+    }
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    console.error('Gemini API error:', JSON.stringify(data));
+    throw new Error('Gemini API error');
+  }
+
+  return (
+    (data.candidates &&
+      data.candidates[0] &&
+      data.candidates[0].content &&
+      data.candidates[0].content.parts &&
+      data.candidates[0].content.parts[0] &&
+      data.candidates[0].content.parts[0].text) ||
+    "Sorry, I didn't catch that."
+  );
+}
+
 app.post('/api/chat', requireAuth, async (req, res) => {
   const userText = (req.body && req.body.text) || '';
   if (!userText.trim()) {
     return res.status(400).json({ error: 'No text provided' });
   }
-  if (!GEMINI_API_KEY) {
-    return res.status(500).json({ error: 'GEMINI_API_KEY not set on server' });
-  }
-
   try {
-    let contextText = '';
-
-    if (isEmailRequest(userText)) {
-      const [gmail] = await checkAllAgents(AGENTS.filter(a => a.id === 'gmail'));
-      contextText += gmail.connected
-        ? (gmail.data.unreadCount > 0
-            ? ` Gmail inbox: ${gmail.data.unreadCount} unread email(s). Most recent unread is from ${gmail.data.latest.from}, subject: "${gmail.data.latest.subject}". Use this real data — never guess or make up email content.`
-            : ' Gmail inbox: no unread emails.')
-        : ' Gmail data is not available right now — tell the user honestly instead of guessing.';
-    }
-
-    const symbol = detectSymbol(userText);
-    if (symbol && isTradePlanRequest(userText)) {
-      const technical = await getTechnicalAnalysis(ENV, symbol);
-      const { plan } = await runTradingPipeline(ENV, { symbol, technical });
-      contextText += plan.available
-        ? ` Trade plan for ${symbol} — action: ${plan.data.action}, confidence: ${plan.data.confidence}, entry: ${plan.data.entry}, stop-loss: ${plan.data.stopLoss}, take-profit: ${plan.data.takeProfit}, support: ${plan.data.support}, resistance: ${plan.data.resistance}. Reasoning: ${plan.data.reasoning}. The user trades manually, so clearly state the action, entry, stop-loss, and take-profit levels — they will place the trade themselves. Never guess or make up trading levels.`
-        : ` A trade plan for ${symbol} was requested but is not available right now (${plan.reason}). Tell the user honestly that trading data isn't available, don't make up a plan.`;
-    }
-
-    const systemInstruction =
-      "You are DeepSea, a calm and confident female AI assistant helping run a personal trading and automation system. " +
-      "Always use feminine Hindi verb forms for yourself (करती हूँ, कर रही हूँ, खोल रही हूँ — never the masculine रहा/करता). " +
-      "Always address the user as \"बॉस\" (Boss). When the user gives you a command or asks you to do something, acknowledge it immediately in the flow of your reply — e.g. \"हाँ बॉस, अभी करती हूँ\" or \"बॉस, मैं ... कर रही हूँ\" — rather than a flat statement with no acknowledgment. " +
-      "You do not manage or discuss the user's MT5 trading account — they trade manually and handle MT5 themselves, so never bring up MT5, balance, equity, or positions unless the user explicitly asks about MT5. " +
-      "Always reply in Hindi (Devanagari script), even if the user speaks in English or Hinglish. " +
-      "You cannot open apps, websites, or files, click anything, or control the browser — you can only talk. The dashboard itself already handles opening YouTube, Gmail, WhatsApp, and Instagram directly, without asking you. If the user asks you to open, click, or launch something else you have no way to do, say plainly that you can't do that yourself, instead of pretending you did it. " +
-      `${contextText} ` +
-      "Only talk about topics the user actually asked about — don't mix in unrelated data. " +
-      "Keep replies short (1-3 sentences), spoken-friendly, and to the point. Never use markdown formatting, asterisks, or bullet points, since your reply is read aloud.";
-
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          system_instruction: { parts: [{ text: systemInstruction }] },
-          contents: [{ role: 'user', parts: [{ text: userText }] }]
-        })
-      }
-    );
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      console.error('Gemini API error:', JSON.stringify(data));
-      return res.status(502).json({ error: 'Gemini API error' });
-    }
-
-    const reply =
-      (data.candidates &&
-        data.candidates[0] &&
-        data.candidates[0].content &&
-        data.candidates[0].content.parts &&
-        data.candidates[0].content.parts[0] &&
-        data.candidates[0].content.parts[0].text) ||
-      "Sorry, I didn't catch that.";
-
+    const reply = await buildDeepSeaReply(userText, 'voice');
     res.json({ reply });
   } catch (err) {
     console.error('Chat error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// WhatsApp bridge (see desktop-assistant/whatsapp-bridge.js) — runs on the
+// user's own PC, authenticates itself with a shared secret instead of the
+// dashboard's session login since there's no browser session to carry one.
+app.post('/api/bridge/chat', async (req, res) => {
+  if (!WHATSAPP_BRIDGE_TOKEN) {
+    return res.status(500).json({ error: 'WHATSAPP_BRIDGE_TOKEN not set on server' });
+  }
+  if (req.get('x-bridge-token') !== WHATSAPP_BRIDGE_TOKEN) {
+    return res.status(401).json({ error: 'unauthorized' });
+  }
+  const userText = (req.body && req.body.text) || '';
+  if (!userText.trim()) {
+    return res.status(400).json({ error: 'No text provided' });
+  }
+  try {
+    const reply = await buildDeepSeaReply(userText, 'whatsapp');
+    res.json({ reply });
+  } catch (err) {
+    console.error('Bridge chat error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });

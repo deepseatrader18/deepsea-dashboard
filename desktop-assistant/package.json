@@ -1,0 +1,15 @@
+{
+  "name": "deepsea-whatsapp-bridge",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Self-bot bridge: message yourself on WhatsApp to talk to the DeepSea dashboard assistant from your phone.",
+  "main": "whatsapp-bridge.js",
+  "scripts": {
+    "start": "node whatsapp-bridge.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "qrcode-terminal": "^0.12.0",
+    "whatsapp-web.js": "^1.34.7"
+  }
+}

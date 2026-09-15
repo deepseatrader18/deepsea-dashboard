@@ -3,3 +3,5 @@ __pycache__/
 *.pyc
 .env
 desktop-assistant/.env
+desktop-assistant/.wwebjs_auth/
+desktop-assistant/.wwebjs_cache/

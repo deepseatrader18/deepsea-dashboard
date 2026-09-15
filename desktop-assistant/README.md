@@ -78,3 +78,54 @@ line बोली जाती है। यह हर terminal session मे�
 | Claps पर कुछ नहीं होता | Mic के पास से ताली बजाएं, `CLAP_SPIKE_RATIO` थोड़ा कम करें (जैसे `6.0` से `4.0`) |
 | Welcome voice नहीं बोलता | `.env` में `ELEVENLABS_API_KEY` और `ELEVENLABS_VOICE_ID` सही check करें, terminal restart करें |
 | "Clap listener disabled" दिखे | Mic किसी और app में exclusive mode में इस्तेमाल हो रहा है, वो app बंद करके फिर से try करें |
+
+## WhatsApp bridge (optional) — फोन से DeepSea से बात करना
+
+ये एक अलग Node.js script (`whatsapp-bridge.js`) है, जो आपके अपने WhatsApp account से
+"Message Yourself" chat में **"deepsea"** से शुरू होने वाला message सुनता है, और dashboard
+के DeepSea assistant (वही जो Trading Room mic में बोलता है) से reply लाकर वापस WhatsApp
+पर भेज देता है। इसमें कोई third-party account (Twilio वगैरह) नहीं चाहिए — सीधे आपके
+WhatsApp से QR code scan करके connect होता है, WhatsApp Web जैसे।
+
+**ज़रूरी बात:** यह [WhatsApp की official terms के against](https://www.whatsapp.com/legal/terms-of-service)
+है (unofficial automation), इसलिए बहुत कम chance है लेकिन number restrict होने का risk
+रहता है। सिर्फ अपने personal use के लिए, कम frequency में इस्तेमाल करें।
+
+### Setup
+
+1. Node.js install करें (अगर पहले से नहीं है): https://nodejs.org — LTS version लें।
+2. `desktop-assistant` folder में dependencies install करें:
+   ```
+   npm install
+   ```
+3. `.env` में (ऊपर वाले `.env.example` से copy किया हुआ) ये दो values भरें:
+   - `WHATSAPP_BRIDGE_TOKEN` — कोई भी random string (जैसे `myDs2026SecretXYZ`) — ये password जैसा है
+   - `DASHBOARD_CHAT_URL` — default already सही है (`https://deepsea-dashboard.onrender.com`)
+4. **यही `WHATSAPP_BRIDGE_TOKEN` value** Render dashboard पर `deepsea-dashboard` service के
+   environment variable के रूप में भी set करनी होगी (Render dashboard → deepsea-dashboard →
+   Environment → `WHATSAPP_BRIDGE_TOKEN` add करें, same value) — दोनों तरफ same string होना
+   ज़रूरी है, वरना bridge काम नहीं करेगा।
+5. Bridge चलाएं:
+   ```
+   npm start
+   ```
+6. Terminal में एक QR code दिखेगा — अपने फोन पर WhatsApp खोलें → Settings → Linked Devices →
+   Link a Device → उस QR code को scan करें। ये सिर्फ **एक बार** करना है, session save हो जाता है।
+7. "DeepSea WhatsApp bridge is ready" दिखने के बाद, अपने फोन से WhatsApp खोलें, khud ko
+   message करें ("Message Yourself" — search bar में अपना नाम type करने पर ऊपर दिखता है),
+   और likhein:
+   ```
+   deepsea gold ka trade plan batao
+   ```
+   कुछ second में DeepSea उसी chat में reply karegi.
+
+Band karne ke liye terminal mein `Ctrl+C` dabayein. Dobara chalane par QR scan nahi karna
+padega (jab tak `.wwebjs_auth` folder delete na karo).
+
+### Customize (`.env` में)
+
+| Setting | क्या करता है |
+| --- | --- |
+| `WHATSAPP_BRIDGE_TOKEN` | Bridge aur dashboard ke beech shared secret — dono jagah same hona chahiye |
+| `DASHBOARD_CHAT_URL` | Dashboard ka URL jaha reply lene ke liye call jata hai |
+| `ALLOWED_WHATSAPP_CHAT_ID` | Default "Message Yourself" chat use hoti hai; kisi specific number se chalana ho to yaha `91XXXXXXXXXX@c.us` format mein daalein |
