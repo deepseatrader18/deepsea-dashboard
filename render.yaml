@@ -27,6 +27,8 @@ services:
         sync: false
       - key: TELEGRAM_CHAT_ID
         sync: false
+      - key: REDIS_URL
+        sync: false
 
   # deepsea-technical-service is no longer used — technical analysis now
   # runs in-process inside deepsea-dashboard (see trading/technical.js) to

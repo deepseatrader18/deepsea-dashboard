@@ -6,6 +6,7 @@ const { getForexFactoryNews } = require('./trading/news');
 const { getTechnicalAnalysis } = require('./trading/technical');
 const { runTradingPipeline } = require('./trading/pipeline');
 const { sendTelegramAlert, formatTradeAlert } = require('./trading/telegramAlert');
+const { recordTrade, checkOpenTrades, getTradeLog } = require('./trading/tradeJournal');
 const app = express();
 
 app.use(express.urlencoded({ extended: true }));
@@ -29,10 +30,11 @@ const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY;
 const TWELVE_DATA_API_KEY = process.env.TWELVE_DATA_API_KEY;
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
+const REDIS_URL = process.env.REDIS_URL;
 
 const ENV = {
   VPS_STATUS_URL, VPS_STATUS_KEY, GMAIL_USER, GMAIL_APP_PASSWORD,
-  OPENAI_API_KEY, GEMINI_API_KEY, RAPIDAPI_KEY, TWELVE_DATA_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+  OPENAI_API_KEY, GEMINI_API_KEY, RAPIDAPI_KEY, TWELVE_DATA_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, REDIS_URL
 };
 const AGENTS = buildAgents(ENV);
 
@@ -41,14 +43,15 @@ const AGENTS = buildAgents(ENV);
 // flip) — not on every 60s dashboard poll while the same signal holds.
 const lastAlertedAction = {};
 
-function maybeSendTradeAlert(symbol, plan) {
+function handleNewTradeSignal(symbol, plan) {
   const currentAction = plan.available ? plan.data.action : null;
   const prevAction = lastAlertedAction[symbol];
-  // Only alert on a real new signal (buy/sell that wasn't already the last
+  // Only act on a real new signal (buy/sell that wasn't already the last
   // one we alerted on) — a "hold" in between resets state so the same
   // direction coming back later counts as new again.
   if (currentAction && currentAction !== 'hold' && currentAction !== prevAction) {
     sendTelegramAlert(ENV, formatTradeAlert(symbol, plan)).catch(err => console.error('Telegram alert error:', err.message));
+    recordTrade(ENV, symbol, plan).catch(err => console.error('Trade Journal record error:', err.message));
   }
   lastAlertedAction[symbol] = currentAction;
 }
@@ -117,6 +120,11 @@ app.get('/api/test-telegram', requireAuth, async (req, res) => {
   res.json(result);
 });
 
+app.get('/api/trades', requireAuth, async (req, res) => {
+  const log = await getTradeLog(ENV);
+  res.json(log);
+});
+
 app.get('/api/status', requireAuth, async (req, res) => {
   const agents = await checkAllAgents(AGENTS);
   const mt5 = agents.find(a => a.id === 'mt5');
@@ -157,7 +165,8 @@ app.get('/api/nexus', requireAuth, async (req, res) => {
       const pipeline = await runTradingPipeline(ENV, { symbol, technical });
       plan = pipeline.plan;
       agents = { chart: pipeline.chartAgent, risk: pipeline.risk };
-      maybeSendTradeAlert(symbol, plan);
+      handleNewTradeSignal(symbol, plan);
+      checkOpenTrades(ENV, symbol, technical.data.price).catch(err => console.error('Trade Journal check error:', err.message));
     }
 
     res.json({
