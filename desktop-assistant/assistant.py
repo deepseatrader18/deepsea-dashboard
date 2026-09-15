@@ -18,13 +18,20 @@ load_dotenv()
 
 # Google's speech-to-text regularly mishears "DeepSea" in an Indian accent
 # as similarly-sounding real words — observed in practice: "gypsy", "dip
-# singh", "tipsy", "deepti". Listing them as wake words too is safe: hearing
-# one only starts listening for a command, and every command still needs a
-# separate spoken "haan"/"confirm karo" before it does anything.
+# singh", "tipsy", "deepti", "pepsi", "dc". Listing them as wake words too
+# is safe: hearing one only starts listening for a command, and every
+# command still needs a separate spoken "haan"/"confirm karo" before it
+# does anything.
+#
+# New mis-hearings keep showing up per voice/accent/mic, so this list is
+# also extendable from .env without touching code: add a
+# WAKE_WORDS_EXTRA=word one,word two line (comma-separated) and restart.
 WAKE_WORDS = [
     'deepsea', 'deep sea', 'deepsee', 'dipsi', 'dipsy',
     'gypsy', 'dip singh', 'tipsy', 'deepti', 'deepsy', 'deepc',
+    'pepsi', 'dc',
 ]
+WAKE_WORDS += [w.strip().lower() for w in os.getenv('WAKE_WORDS_EXTRA', '').split(',') if w.strip()]
 
 # Order matters: more specific patterns should come before broader ones.
 SITE_COMMANDS = {

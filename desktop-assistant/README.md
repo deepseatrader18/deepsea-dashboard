@@ -16,7 +16,9 @@
 
 **हर command confirm होता है, execute होने से पहले:** wake word ("DeepSea") ke baad jo bhi command bolo, assistant use wapas dohrayega ("Aapne bola: ... — pakka?") aur ek **beep** bajega — usi waqt bolo **"haan"** ya **"confirm karo"** (~8 second ke andar), tabhi wo command chalegi. Kuch aur bolo ya chup raho to wo command cancel ho jata hai, kuch nahi hota. Ye galti se — mic ne kuch aur sun liya, ya galat samjha — kisi bhi action ko rokta hai.
 
-**Wake word ("DeepSea") thoda alag-alag sunaayi de sakta hai** — Indian accent mein Google ka speech-to-text kabhi "Gypsy", "Tipsy", "Deepti" jaisa sun leta hai. Ye sab bhi wake word list mein add hain, isliye phir bhi kaam kar jayega — lekin best tarika hai "**Deep... Sea**" ko thoda pause ke saath, clearly, mic ke paas bolna.
+**Wake word ("DeepSea") thoda alag-alag sunaayi de sakta hai** — Indian accent mein Google ka speech-to-text kabhi "Gypsy", "Tipsy", "Deepti", "Pepsi", "DC" jaisa sun leta hai. Ye sab bhi wake word list mein add hain, isliye phir bhi kaam kar jayega — lekin best tarika hai "**Deep... Sea**" ko thoda pause ke saath, clearly, mic ke paas bolna.
+
+**Naya mis-hearing mile to khud add kar sakte ho, code change nahi karna:** terminal mein "Heard: ..." line dekho jab tumne "DeepSea" bola tha lekin wo pakad nahi paaya — jo bhi wahan print hua hai (jaise "pepsi" ya "dc"), usko `.env` mein `WAKE_WORDS_EXTRA=` ke aage comma se add kar do (jaise `WAKE_WORDS_EXTRA=xyz,abc`), assistant restart karo.
 
 ## Setup (Windows)
 
