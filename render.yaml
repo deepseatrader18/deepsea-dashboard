@@ -29,6 +29,31 @@ services:
         sync: false
       - key: REDIS_URL
         sync: false
+      - key: TRADING_AGENTS_SERVICE_URL
+        sync: false
+      - key: TRADING_AGENTS_SERVICE_TOKEN
+        sync: false
+
+  # Runs the TradingAgents multi-agent LLM pipeline (github.com/TauricResearch/TradingAgents)
+  # as a background job and exposes its live per-agent progress, so the Trading
+  # Room's Deep Analysis panel shows real pipeline state instead of a canned
+  # animation. Free tier: cold-starts after 15 min idle (first request after a
+  # sleep can take ~30-60s just to wake up, before the analysis itself runs),
+  # and only runs one analysis at a time.
+  - type: web
+    name: deepsea-trading-agents-service
+    runtime: python
+    plan: free
+    buildCommand: cd trading-agents-service && pip install -r requirements.txt
+    startCommand: cd trading-agents-service && uvicorn app:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: TRADING_AGENTS_SERVICE_TOKEN
+        sync: false
 
   # deepsea-technical-service is no longer used — technical analysis now
   # runs in-process inside deepsea-dashboard (see trading/technical.js) to

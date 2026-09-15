@@ -32,10 +32,20 @@ const TWELVE_DATA_API_KEY = process.env.TWELVE_DATA_API_KEY;
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 const REDIS_URL = process.env.REDIS_URL;
+const TRADING_AGENTS_SERVICE_URL = process.env.TRADING_AGENTS_SERVICE_URL;
+const TRADING_AGENTS_SERVICE_TOKEN = process.env.TRADING_AGENTS_SERVICE_TOKEN;
 
 const ENV = {
   VPS_STATUS_URL, VPS_STATUS_KEY, GMAIL_USER, GMAIL_APP_PASSWORD,
   OPENAI_API_KEY, GEMINI_API_KEY, RAPIDAPI_KEY, TWELVE_DATA_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, REDIS_URL
+};
+
+// Dashboard symbols -> tickers the TradingAgents service (yfinance-backed)
+// understands, plus the asset_type its graph branches on.
+const DEEP_ANALYSIS_SYMBOL_MAP = {
+  XAUUSD: { ticker: 'GC=F', assetType: 'stock' },
+  BTCUSD: { ticker: 'BTC-USD', assetType: 'crypto' },
+  EURUSD: { ticker: 'EURUSD=X', assetType: 'stock' }
 };
 const AGENTS = buildAgents(ENV);
 
@@ -211,6 +221,60 @@ app.get('/api/nexus', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('Nexus data error:', err);
     res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// TradingAgents deep analysis (see trading-agents-service/) — a much slower,
+// LLM-multi-agent-debate second opinion alongside the fast rule-based
+// pipeline above. Both routes just proxy to that Python service with a
+// shared-secret header; the service itself tracks job state.
+app.post('/api/deep-analysis', requireAuth, async (req, res) => {
+  if (!TRADING_AGENTS_SERVICE_URL) {
+    return res.status(500).json({ error: 'TRADING_AGENTS_SERVICE_URL not set on server' });
+  }
+  const symbol = (req.body && req.body.symbol || '').toUpperCase();
+  const mapping = DEEP_ANALYSIS_SYMBOL_MAP[symbol];
+  if (!mapping) {
+    return res.status(400).json({ error: `Unsupported symbol: ${symbol}` });
+  }
+  try {
+    const upstream = await fetch(`${TRADING_AGENTS_SERVICE_URL}/analyze`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(TRADING_AGENTS_SERVICE_TOKEN ? { 'x-service-token': TRADING_AGENTS_SERVICE_TOKEN } : {})
+      },
+      body: JSON.stringify({ symbol: mapping.ticker, asset_type: mapping.assetType }),
+      signal: AbortSignal.timeout(15000)
+    });
+    const data = await upstream.json();
+    if (!upstream.ok) {
+      return res.status(upstream.status === 409 ? 409 : 502).json({ error: data.detail || 'Deep analysis service error' });
+    }
+    res.json(data);
+  } catch (err) {
+    console.error('Deep analysis start error:', err.message);
+    res.status(502).json({ error: 'Deep analysis service unreachable (it may be waking up from sleep — retry in ~30s)' });
+  }
+});
+
+app.get('/api/deep-analysis/:jobId', requireAuth, async (req, res) => {
+  if (!TRADING_AGENTS_SERVICE_URL) {
+    return res.status(500).json({ error: 'TRADING_AGENTS_SERVICE_URL not set on server' });
+  }
+  try {
+    const upstream = await fetch(`${TRADING_AGENTS_SERVICE_URL}/analyze/${encodeURIComponent(req.params.jobId)}`, {
+      headers: TRADING_AGENTS_SERVICE_TOKEN ? { 'x-service-token': TRADING_AGENTS_SERVICE_TOKEN } : {},
+      signal: AbortSignal.timeout(10000)
+    });
+    const data = await upstream.json();
+    if (!upstream.ok) {
+      return res.status(upstream.status).json({ error: data.detail || 'Deep analysis service error' });
+    }
+    res.json(data);
+  } catch (err) {
+    console.error('Deep analysis poll error:', err.message);
+    res.status(502).json({ error: 'Deep analysis service unreachable' });
   }
 });
 
