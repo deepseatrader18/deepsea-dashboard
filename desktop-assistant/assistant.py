@@ -298,27 +298,46 @@ def handle_command(text, recognizer, mic):
         print(f'-> Cancelled: {description}')
 
 
-# --- Optional: lets the WhatsApp bridge (whatsapp-bridge.js) trigger these
-# same laptop commands from your phone, not just chat with the dashboard.
-# It POSTs here on localhost instead of speaking into the mic; confirmation
-# happens as a WhatsApp reply instead of a spoken "haan". Only starts if
+# --- Optional: lets the WhatsApp bridge (whatsapp-bridge.js) *and* the
+# dashboard's own browser mic (dashboard.html) trigger these same laptop
+# commands, not just chat with the dashboard. Both POST here on localhost
+# instead of speaking into this script's own mic; confirmation happens as
+# a WhatsApp/dashboard reply instead of a spoken "haan". Only starts if
 # WHATSAPP_BRIDGE_TOKEN is set, and every request must carry that same
 # token, so nothing else on the laptop (or network) can trigger actions
-# through it.
+# through it. The dashboard page fetches that same token from its own
+# server (only once logged in) — see /api/laptop-token in index.js.
 WHATSAPP_BRIDGE_TOKEN = os.getenv('WHATSAPP_BRIDGE_TOKEN', '')
 REMOTE_COMMAND_PORT = int(os.getenv('ASSISTANT_LOCAL_PORT', '8765'))
 REMOTE_CONFIRM_TIMEOUT_SECONDS = 60
+# The dashboard page (an https:// origin) calls this local server directly
+# from the browser via fetch(), which needs CORS headers to be allowed —
+# scoped to exactly this origin so no other website's script can also
+# reach it just by knowing (or guessing) it's listening on this port.
+DASHBOARD_ORIGIN = os.getenv('DASHBOARD_CHAT_URL', 'https://deepsea-dashboard.onrender.com').rstrip('/')
 
 _pending_remote_command = None
 _pending_remote_lock = threading.Lock()
 
 
 class _RemoteCommandHandler(BaseHTTPRequestHandler):
+    def _cors_headers(self):
+        if self.headers.get('Origin') == DASHBOARD_ORIGIN:
+            self.send_header('Access-Control-Allow-Origin', DASHBOARD_ORIGIN)
+            self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+            self.send_header('Access-Control-Allow-Headers', 'Content-Type, x-bridge-token')
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self._cors_headers()
+        self.end_headers()
+
     def _send_json(self, status, payload):
         body = json.dumps(payload).encode('utf-8')
         self.send_response(status)
         self.send_header('Content-Type', 'application/json')
         self.send_header('Content-Length', str(len(body)))
+        self._cors_headers()
         self.end_headers()
         self.wfile.write(body)
 

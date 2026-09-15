@@ -353,6 +353,22 @@ async function buildDeepSeaReply(userText, channel = 'voice') {
   );
 }
 
+// Lets the logged-in dashboard page talk to the user's own laptop
+// (desktop-assistant/assistant.py, listening on their own machine's
+// localhost) for real system control — Chrome, lock, media, etc. — the
+// same way the WhatsApp bridge already does. The browser can't reach the
+// user's laptop through Render (that's the whole point of it being
+// local), so the browser itself makes that call directly; this route
+// only hands the already-authenticated session the shared secret needed
+// to do so, reusing the same WHATSAPP_BRIDGE_TOKEN already set on both
+// sides for the WhatsApp bridge.
+app.get('/api/laptop-token', requireAuth, (req, res) => {
+  if (!WHATSAPP_BRIDGE_TOKEN) {
+    return res.status(404).json({ error: 'WHATSAPP_BRIDGE_TOKEN not set on server' });
+  }
+  res.json({ token: WHATSAPP_BRIDGE_TOKEN });
+});
+
 app.post('/api/chat', requireAuth, async (req, res) => {
   const userText = (req.body && req.body.text) || '';
   if (!userText.trim()) {

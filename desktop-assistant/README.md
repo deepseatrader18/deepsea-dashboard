@@ -94,6 +94,25 @@ session में सिर्फ एक बार चलता है — द�
 | Welcome voice नहीं बोलता | Internet connection check करें (edge-tts को internet चाहिए), terminal restart करें |
 | "Clap listener disabled" दिखे | Mic किसी और app में exclusive mode में इस्तेमाल हो रहा है, वो app बंद करके फिर से try करें |
 
+## Dashboard ke mic se laptop control (bina WhatsApp ke)
+
+Dashboard (`dashboard.html`, jahan aap login karke "DeepSea" bolte ho) ka mic ab
+seedha aapke laptop ko bhi control kar sakta hai — Chrome kholna, lock karna,
+gana sunao, wagaira — bilkul waisa hi jaisa `assistant.py` ke terminal mic se
+hota hai, bas ab browser se.
+
+**Zaroori:** `python assistant.py` aapke laptop par chalna chahiye (jis laptop
+par aap dashboard khol rahe ho, usi par) — dashboard page seedha
+`http://127.0.0.1:8765` par (assistant.py ka apna local server) call karta hai,
+kyunki Render (jahan dashboard host hai) aapke laptop tak nahi pahunch sakta.
+Agar `assistant.py` band hai, to mic pehle jaisa hi normal chat/browser-tab
+behavior karta rahega — kuch break nahi hoga.
+
+**Use karna:** dashboard par jaakar "DeepSea" boliye jaise normal karte ho,
+fir command boliye (jaise "chrome kholo" ya "gana sunao"). Agar wo ek laptop
+command hai, dashboard bolegi "... pakka? haan boliye" — aap bas **"haan"**
+boliye (60 second ke andar), command laptop par chal jayegi.
+
 ## WhatsApp bridge (optional) — फोन से DeepSea से बात करना
 
 ये एक अलग Node.js script (`whatsapp-bridge.js`) है, जो आपके अपने WhatsApp account से

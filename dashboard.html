@@ -594,11 +594,81 @@
     return WAKE_WORDS.some(w => lower.includes(w.toLowerCase()));
   }
 
+  // Real laptop control (Chrome, lock, media, gana sunao, etc.) — the same
+  // things desktop-assistant/assistant.py understands by voice or over the
+  // WhatsApp bridge. The browser can't reach the user's own laptop through
+  // Render, so this fetches assistant.py's local server directly at
+  // 127.0.0.1 (only reachable because this page and that server are on the
+  // same machine); if it's not running, tryLaptopCommand() fails silently
+  // and the caller falls through to the browser-only APP_LINKS/Gemini path
+  // below, so the mic still works even without the laptop assistant on.
+  const LOCAL_ASSISTANT_URL = 'http://127.0.0.1:8765';
+  const LAPTOP_CONFIRM_WORDS = ['haan', 'ha', 'yes', 'confirm'];
+  let laptopToken = null;
+  let pendingLaptopCommand = null;
+  let awaitingLaptopConfirm = false;
+
+  fetch('/api/laptop-token')
+    .then(res => (res.ok ? res.json() : null))
+    .then(data => { if (data && data.token) laptopToken = data.token; })
+    .catch(() => { /* not logged in yet, or route unavailable — mic still works without it */ });
+
+  async function tryLaptopCommand(text) {
+    if (!laptopToken) return false;
+    try {
+      const res = await fetch(`${LOCAL_ASSISTANT_URL}/command`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-bridge-token': laptopToken },
+        body: JSON.stringify({ text })
+      });
+      if (!res.ok) return false;
+      const data = await res.json();
+      if (!data.matched) return false;
+      pendingLaptopCommand = { description: data.description };
+      awaitingLaptopConfirm = true;
+      logLine('DEEPSEA', `Aapne bola: "${text}". ${data.description} — pakka? Boliye "haan".`);
+      speak(`${data.description}. Confirm karne ke liye haan boliye.`);
+      return true;
+    } catch (err) {
+      return false; // laptop assistant not running on this machine — fall through
+    }
+  }
+
+  async function confirmLaptopCommand(text) {
+    awaitingLaptopConfirm = false;
+    const pending = pendingLaptopCommand;
+    pendingLaptopCommand = null;
+    const lower = text.toLowerCase();
+    if (!LAPTOP_CONFIRM_WORDS.some(w => lower.includes(w))) {
+      logLine('SYSTEM', `Cancelled: ${pending.description}`);
+      speak('Theek hai, cancel kar diya.');
+      return;
+    }
+    try {
+      const res = await fetch(`${LOCAL_ASSISTANT_URL}/confirm`, {
+        method: 'POST',
+        headers: { 'x-bridge-token': laptopToken }
+      });
+      const data = await res.json();
+      if (data.ok) {
+        logLine('DEEPSEA', `Ho gaya: ${data.description}`);
+        speak('Ho gaya, boss.');
+      } else {
+        logLine('DEEPSEA', `Cancelled (time out ho gaya): ${pending.description}`);
+        speak('Ye cancel ho gaya, dobara try karo.');
+      }
+    } catch (err) {
+      logLine('SYSTEM', 'Laptop assistant se connect nahi ho paaya.');
+      speak('Laptop assistant se connect nahi ho paaya.');
+    }
+  }
+
   // DeepSea's brain (Gemini) can only talk — it has no way to actually
   // control the browser. Without this, it would say "YouTube khol raha hoon"
   // and do nothing, which is worse than not offering the feature at all.
   // Handle "open <app>" requests directly in the browser instead of sending
-  // them to Gemini.
+  // them to Gemini. (Laptop commands above are tried first; this is the
+  // fallback for opening a browser tab when the laptop assistant isn't running.)
   const APP_LINKS = [
     { keys: ['youtube', 'यूट्यूब', 'यूटूब', 'यू ट्यूब'], url: 'https://www.youtube.com', name: 'YouTube' },
     { keys: ['gmail', 'जीमेल', 'जी मेल', 'mail', 'मेल'], url: 'https://mail.google.com', name: 'Gmail' },
@@ -688,11 +758,20 @@
       const spokenText = last[0].transcript;
       logLine('HEARD', spokenText);
 
+      if (awaitingLaptopConfirm) {
+        recognition.lang = 'en-IN';
+        confirmLaptopCommand(spokenText);
+        return;
+      }
+
       if (awaitingCommand) {
         awaitingCommand = false;
         recognition.lang = 'en-IN';
-        if (tryOpenApp(spokenText)) return;
-        sendToDeepSea(spokenText);
+        tryLaptopCommand(spokenText).then(handled => {
+          if (handled) return;
+          if (tryOpenApp(spokenText)) return;
+          sendToDeepSea(spokenText);
+        });
         return;
       }
 
