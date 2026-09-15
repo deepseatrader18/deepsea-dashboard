@@ -5,7 +5,16 @@ const qrcode = require('qrcode-terminal');
 const BRIDGE_TOKEN = process.env.WHATSAPP_BRIDGE_TOKEN;
 const DASHBOARD_CHAT_URL = process.env.DASHBOARD_CHAT_URL || 'https://deepsea-dashboard.onrender.com';
 const ALLOWED_CHAT_ID = process.env.ALLOWED_WHATSAPP_CHAT_ID || null;
+const LOCAL_ASSISTANT_URL = process.env.LOCAL_ASSISTANT_URL || 'http://127.0.0.1:8765';
 const WAKE_WORD = 'deepsea';
+const CONFIRM_WORDS = ['haan', 'ha', 'yes', 'confirm', 'confirm karo'];
+const REMOTE_CONFIRM_WINDOW_MS = 60000;
+
+// Set once a laptop command is matched (see the /command call below) and
+// cleared on the next message either way — mirrors assistant.py's own
+// "anything that isn't a clear yes counts as no" rule, just over WhatsApp
+// instead of the mic.
+let pendingCommand = null;
 
 if (!BRIDGE_TOKEN) {
   console.error('WHATSAPP_BRIDGE_TOKEN not set in .env — see .env.example. The same value must also be set as an env var on the deepsea-dashboard Render service.');
@@ -61,13 +70,65 @@ client.on('message_create', async msg => {
   }
 
   const body = (msg.body || '').trim();
-  if (!body.toLowerCase().startsWith(WAKE_WORD)) {
+  const lower = body.toLowerCase();
+
+  // A laptop command is waiting on a "haan" — this reply doesn't need the
+  // "deepsea" wake word again, same as it wouldn't need it a second time
+  // when confirming by voice.
+  if (pendingCommand && Date.now() < pendingCommand.expiresAt) {
+    const pending = pendingCommand;
+    pendingCommand = null;
+    const isConfirm = CONFIRM_WORDS.some(w => lower === w || lower.startsWith(w + ' '));
+    if (!isConfirm) {
+      console.log(`[debug] pending command cancelled by reply: "${body}"`);
+      await client.sendMessage(msg.to, `Cancelled: ${pending.description}`);
+      return;
+    }
+    try {
+      const res = await fetch(`${LOCAL_ASSISTANT_URL}/confirm`, {
+        method: 'POST',
+        headers: { 'x-bridge-token': BRIDGE_TOKEN },
+        signal: AbortSignal.timeout(15000)
+      });
+      const data = await res.json();
+      await client.sendMessage(msg.to, data.ok ? `Ho gaya: ${data.description}` : `Cancelled (time out ho gaya): ${pending.description}`);
+    } catch (err) {
+      console.error('Confirm request to local assistant failed:', err.message);
+      await client.sendMessage(msg.to, 'Laptop assistant se connect nahi ho paaya — check karo ki python assistant.py laptop par chal raha hai.');
+    }
+    return;
+  }
+
+  if (!lower.startsWith(WAKE_WORD)) {
     console.log(`[debug] no wake word "${WAKE_WORD}" — skipping`);
     return;
   }
   const commandText = body.slice(WAKE_WORD.length).trim() || body;
 
   console.log(`-> Command: ${commandText}`);
+
+  // Try it as a laptop command first (Chrome, lock, media, etc. — the same
+  // things assistant.py understands by voice). If assistant.py isn't
+  // running, or the text doesn't match any known command, this falls
+  // through to the normal dashboard chat reply below.
+  try {
+    const res = await fetch(`${LOCAL_ASSISTANT_URL}/command`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-bridge-token': BRIDGE_TOKEN },
+      body: JSON.stringify({ text: commandText }),
+      signal: AbortSignal.timeout(5000)
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.matched) {
+        pendingCommand = { description: data.description, expiresAt: Date.now() + REMOTE_CONFIRM_WINDOW_MS };
+        await client.sendMessage(msg.to, `Aapne bola: "${commandText}". ${data.description} — pakka? 60 second ke andar "haan" likho.`);
+        return;
+      }
+    }
+  } catch (err) {
+    console.log(`[debug] local assistant not reachable (${err.message}) — falling back to dashboard chat`);
+  }
 
   // client.sendMessage(chatId, text) instead of msg.getChat() + chat.sendMessage():
   // getChatById() throws on @lid-addressed chats on this whatsapp-web.js

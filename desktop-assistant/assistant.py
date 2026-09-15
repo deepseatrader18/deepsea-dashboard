@@ -1,4 +1,5 @@
 import ctypes
+import json
 import os
 import re
 import threading
@@ -7,6 +8,7 @@ import webbrowser
 import winsound
 from collections import deque
 from datetime import datetime
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import numpy as np
 import pyautogui
@@ -223,30 +225,116 @@ COMMAND_RESOLVERS = [
 ]
 
 
+def resolve_command(text):
+    """Matches text (spoken or typed, e.g. from the WhatsApp bridge)
+    against COMMAND_RESOLVERS. Returns (description, action) for the
+    first match, or None."""
+    lower = text.lower()
+    for resolver in COMMAND_RESOLVERS:
+        result = resolver(text, lower)
+        if result is not None:
+            return result
+    return None
+
+
 def handle_command(text, recognizer, mic):
     """Resolves the spoken text to at most one action, repeats it back for
     confirmation, and only then runs it — every command goes through this
     same confirm-first gate, not just the destructive ones, so a
     speech-recognition misfire never silently does something on the
     laptop nobody actually asked for."""
-    lower = text.lower()
-
-    for resolver in COMMAND_RESOLVERS:
-        result = resolver(text, lower)
-        if result is None:
-            continue
-        description, action = result
-        if confirm_action(recognizer, mic, f'Aapne bola: "{text}". {description} — pakka?'):
-            try:
-                action()
-                print(f'-> Done: {description}')
-            except Exception as exc:
-                print(f'-> Action failed: {exc}')
-        else:
-            print(f'-> Cancelled: {description}')
+    result = resolve_command(text)
+    if result is None:
+        print(f'-> Command not recognized: "{text}"')
         return
 
-    print(f'-> Command not recognized: "{text}"')
+    description, action = result
+    if confirm_action(recognizer, mic, f'Aapne bola: "{text}". {description} — pakka?'):
+        try:
+            action()
+            print(f'-> Done: {description}')
+        except Exception as exc:
+            print(f'-> Action failed: {exc}')
+    else:
+        print(f'-> Cancelled: {description}')
+
+
+# --- Optional: lets the WhatsApp bridge (whatsapp-bridge.js) trigger these
+# same laptop commands from your phone, not just chat with the dashboard.
+# It POSTs here on localhost instead of speaking into the mic; confirmation
+# happens as a WhatsApp reply instead of a spoken "haan". Only starts if
+# WHATSAPP_BRIDGE_TOKEN is set, and every request must carry that same
+# token, so nothing else on the laptop (or network) can trigger actions
+# through it.
+WHATSAPP_BRIDGE_TOKEN = os.getenv('WHATSAPP_BRIDGE_TOKEN', '')
+REMOTE_COMMAND_PORT = int(os.getenv('ASSISTANT_LOCAL_PORT', '8765'))
+REMOTE_CONFIRM_TIMEOUT_SECONDS = 60
+
+_pending_remote_command = None
+_pending_remote_lock = threading.Lock()
+
+
+class _RemoteCommandHandler(BaseHTTPRequestHandler):
+    def _send_json(self, status, payload):
+        body = json.dumps(payload).encode('utf-8')
+        self.send_response(status)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Content-Length', str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _authorized(self):
+        return bool(WHATSAPP_BRIDGE_TOKEN) and self.headers.get('x-bridge-token') == WHATSAPP_BRIDGE_TOKEN
+
+    def do_POST(self):
+        global _pending_remote_command
+        if not self._authorized():
+            self._send_json(401, {'error': 'unauthorized'})
+            return
+
+        length = int(self.headers.get('Content-Length', 0) or 0)
+        raw = self.rfile.read(length) if length else b'{}'
+        try:
+            data = json.loads(raw or b'{}')
+        except ValueError:
+            data = {}
+
+        if self.path == '/command':
+            text = (data.get('text') or '').strip()
+            result = resolve_command(text) if text else None
+            if result is None:
+                self._send_json(200, {'matched': False})
+                return
+            description, action = result
+            with _pending_remote_lock:
+                _pending_remote_command = (description, action, time.time() + REMOTE_CONFIRM_TIMEOUT_SECONDS)
+            self._send_json(200, {'matched': True, 'description': description})
+
+        elif self.path == '/confirm':
+            with _pending_remote_lock:
+                pending = _pending_remote_command
+                _pending_remote_command = None
+            if not pending or time.time() > pending[2]:
+                self._send_json(200, {'ok': False})
+                return
+            description, action = pending[0], pending[1]
+            try:
+                action()
+                self._send_json(200, {'ok': True, 'description': description})
+            except Exception as exc:
+                self._send_json(200, {'ok': False, 'error': str(exc)})
+
+        else:
+            self._send_json(404, {'error': 'not found'})
+
+    def log_message(self, *args):
+        pass  # keep the assistant's own terminal output uncluttered
+
+
+def remote_command_server():
+    server = ThreadingHTTPServer(('127.0.0.1', REMOTE_COMMAND_PORT), _RemoteCommandHandler)
+    print(f'-> WhatsApp command bridge listening on http://127.0.0.1:{REMOTE_COMMAND_PORT}')
+    server.serve_forever()
 
 
 def speak_welcome(text):
@@ -341,6 +429,11 @@ def main():
 
     if CLAP_ENABLED:
         threading.Thread(target=clap_listener, daemon=True).start()
+
+    if WHATSAPP_BRIDGE_TOKEN:
+        threading.Thread(target=remote_command_server, daemon=True).start()
+    else:
+        print('-> WhatsApp command bridge disabled (WHATSAPP_BRIDGE_TOKEN not set in .env)')
 
     awaiting_command = False
     while True:

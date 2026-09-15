@@ -144,3 +144,29 @@ padega (jab tak `.wwebjs_auth` folder delete na karo).
 | `WHATSAPP_BRIDGE_TOKEN` | Bridge aur dashboard ke beech shared secret — dono jagah same hona chahiye |
 | `DASHBOARD_CHAT_URL` | Dashboard ka URL jaha reply lene ke liye call jata hai |
 | `ALLOWED_WHATSAPP_CHAT_ID` | Default "Message Yourself" chat use hoti hai; kisi specific number se chalana ho to yaha `91XXXXXXXXXX@c.us` format mein daalein |
+| `ASSISTANT_LOCAL_PORT` / `LOCAL_ASSISTANT_URL` | Laptop-command feature (neeche dekhein) ke liye port — sirf tab badlein agar `8765` pehle se kisi aur cheez ne le rakha ho |
+
+## Phone se laptop control (WhatsApp ke through)
+
+WhatsApp bridge chalu ho to, aap wahi laptop commands (Chrome kholna, lock karna,
+media control, wagaira — jo voice se `assistant.py` samajhta hai) apne **phone se
+bhi** de sakte hain, sirf typing karke, bina laptop ke paas gaye.
+
+**Zaroori:** dono script — `python assistant.py` (voice wala) aur `npm start`
+(WhatsApp bridge) — laptop par **ek saath chalne** chahiye alag-alag terminal
+windows mein. Bridge phone se command leke localhost par assistant.py ko bhejta
+hai; agar assistant.py band hai, to bridge apne aap normal dashboard chat wapas
+try karega.
+
+**Use karna:** phone se "Message Yourself" chat mein likhein, jaise:
+```
+deepsea chrome kholo
+```
+DeepSea WhatsApp par wapas puchegi: `Aapne bola: "chrome kholo". chrome kholna — pakka? 60 second ke andar "haan" likho.`
+Aap sirf likhein:
+```
+haan
+```
+60 second ke andar, tabhi wo command laptop par chalegi. Kuch aur likho ya chup raho to cancel ho jata hai — bilkul voice wale confirm jaisa hi safety gate hai.
+
+Agar text koi laptop command nahi hai (jaise "gold ka trade plan batao"), to bridge use seedha dashboard ke DeepSea assistant ko bhej deta hai, jaisa pehle karta tha.
