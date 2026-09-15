@@ -68,8 +68,14 @@ client.on('message_create', async msg => {
   const commandText = body.slice(WAKE_WORD.length).trim() || body;
 
   console.log(`-> Command: ${commandText}`);
-  const chat = await msg.getChat();
 
+  // client.sendMessage(chatId, text) instead of msg.getChat() + chat.sendMessage():
+  // getChatById() throws on @lid-addressed chats on this whatsapp-web.js
+  // version (confirmed by the crash in Client.getChatById), and since that
+  // crash happened outside any try/catch it took the whole process down —
+  // sendMessage() takes the chat id directly and doesn't need that lookup,
+  // and everything here is now inside try/catch so a future failure logs
+  // instead of crashing the bridge.
   try {
     const res = await fetch(`${DASHBOARD_CHAT_URL}/api/bridge/chat`, {
       method: 'POST',
@@ -78,11 +84,19 @@ client.on('message_create', async msg => {
       signal: AbortSignal.timeout(30000)
     });
     const data = await res.json();
-    await chat.sendMessage(data.reply || data.error || 'DeepSea se reply nahi mil paya.');
+    await client.sendMessage(msg.to, data.reply || data.error || 'DeepSea se reply nahi mil paya.');
   } catch (err) {
     console.error('Bridge request failed:', err.message);
-    await chat.sendMessage('DeepSea abhi available nahi hai, thodi der mein try karo.');
+    try {
+      await client.sendMessage(msg.to, 'DeepSea abhi available nahi hai, thodi der mein try karo.');
+    } catch (sendErr) {
+      console.error('Could not even send the error reply:', sendErr.message);
+    }
   }
+});
+
+process.on('unhandledRejection', err => {
+  console.error('Unhandled error (bridge stays up):', err);
 });
 
 client.initialize();
