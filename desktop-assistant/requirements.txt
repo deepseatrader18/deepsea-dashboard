@@ -1,7 +1,11 @@
 SpeechRecognition==3.10.4
 PyAudio==0.2.14
 PyAutoGUI==0.9.54
-numpy==1.26.4
+# Unpinned (was ==1.26.4): that exact version has no prebuilt wheel for
+# newer Python releases, forcing pip to compile it from source — which
+# then fails without Visual Studio's C compiler installed. Let pip pick
+# whichever numpy has a prebuilt wheel for the installed Python instead.
+numpy
 sounddevice==0.4.6
 elevenlabs==1.9.0
 python-dotenv==1.0.1
