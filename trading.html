@@ -299,6 +299,7 @@
     <div class="panel">
       <div class="panel-head">
         <div class="panel-title"><span class="dot" style="background:var(--amber)"></span>Risk Levels</div>
+        <span class="bias-badge" id="rActionBadge" style="background:rgba(118,136,168,.16);color:#9db0cc">—</span>
       </div>
       <div class="risk-grid">
         <div class="risk-cell"><div class="k">Entry</div><div class="v entry mono" id="rEntry">—</div></div>
@@ -428,8 +429,10 @@
       { label: 'MACD histogram positive', on: typeof t.macdHistogram === 'number' && t.macdHistogram > 0 }
     ];
     const onCount = items.filter(i => i.on).length;
+    const lean = onCount >= 3 ? 'BULLISH' : onCount <= 1 ? 'BEARISH' : 'MIXED';
+    const leanColor = lean === 'BULLISH' ? '#2fdb96' : lean === 'BEARISH' ? '#ff4d6d' : '#7688a8';
     const confBig = document.getElementById('confBig');
-    confBig.textContent = onCount + '/4 bullish';
+    confBig.innerHTML = `${onCount}/4 bullish <span style="font-size:15px;color:${leanColor}">→ ${lean}</span>`;
     document.getElementById('confMeter').style.width = (onCount / 4 * 100) + '%';
 
     const cl = document.getElementById('checklist');
@@ -563,6 +566,16 @@
       if (plan.available) {
         setSignalGauge(plan.data.action, plan.data.confidence === 'high' ? 90 : plan.data.confidence === 'medium' ? 65 : plan.data.confidence === 'low' ? 35 : plan.data.confidence);
         document.getElementById('reasonText').textContent = plan.data.reasoning || '—';
+        const actionBadge = document.getElementById('rActionBadge');
+        const actionColors = {
+          buy: { bg: 'rgba(47,219,150,.16)', fg: '#2fdb96' },
+          sell: { bg: 'rgba(255,77,109,.16)', fg: '#ff4d6d' },
+          hold: { bg: 'rgba(118,136,168,.16)', fg: '#9db0cc' }
+        };
+        const ac = actionColors[plan.data.action] || actionColors.hold;
+        actionBadge.textContent = (plan.data.action || '—').toUpperCase();
+        actionBadge.style.background = ac.bg;
+        actionBadge.style.color = ac.fg;
         document.getElementById('rEntry').textContent = plan.data.entry != null ? fmtUsd(plan.data.entry) : '—';
         document.getElementById('rSl').textContent = plan.data.stopLoss != null ? fmtUsd(plan.data.stopLoss) : '—';
         document.getElementById('rTp').textContent = plan.data.takeProfit != null ? fmtUsd(plan.data.takeProfit) : '—';
@@ -577,6 +590,10 @@
       } else {
         setSignalGauge(null, null);
         document.getElementById('reasonText').textContent = `Trade plan not available right now (${plan.reason}).`;
+        const actionBadge = document.getElementById('rActionBadge');
+        actionBadge.textContent = '—';
+        actionBadge.style.background = 'rgba(118,136,168,.16)';
+        actionBadge.style.color = '#9db0cc';
       }
 
       renderNews(news);
