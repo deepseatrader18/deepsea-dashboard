@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DEEPSEA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --void:#050a12;
+    --void-deep:#02060b;
+    --panel:#0a1626;
+    --cyan:#2fe6ff;
+    --cyan-dim:rgba(47,230,255,0.45);
+    --teal:#17e8b0;
+    --violet:#8b7bff;
+    --text-hi:#e6f4fb;
+    --text-mid:#8fa8bd;
+    --text-dim:#4c6377;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%;}
+  body{
+    min-height:100vh;
+    background:
+      radial-gradient(ellipse at 20% 10%, rgba(23,60,90,0.35), transparent 55%),
+      radial-gradient(ellipse at 85% 90%, rgba(23,232,176,0.06), transparent 50%),
+      var(--void-deep);
+    color:var(--text-hi);
+    font-family:'Inter', sans-serif;
+    display:flex;
+    flex-direction:column;
+    overflow-x:hidden;
+  }
+  .head-font{font-family:'Space Grotesk', sans-serif;}
+  .mono{font-family:'JetBrains Mono', monospace;}
+
+  /* faint starfield */
+  #stars{position:fixed; inset:0; z-index:0; pointer-events:none; opacity:.5;}
+  #stars span{position:absolute; width:2px; height:2px; border-radius:50%; background:#bcd7ea;}
+
+  header{
+    position:relative; z-index:2;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:20px clamp(16px,4vw,40px);
+  }
+  .brand{display:flex; align-items:center; gap:10px; text-decoration:none; color:inherit;}
+  .brand-icon{width:26px; height:26px; color:var(--cyan);}
+  .brand-text .name{font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:16px; letter-spacing:.04em;}
+  .brand-text .name span{color:var(--cyan);}
+  .brand-text .tagline{font-size:9.5px; color:var(--text-dim); letter-spacing:.16em; margin-top:1px;}
+  header a.logout{font-size:11px; color:var(--text-dim); text-decoration:none; border:1px solid rgba(143,168,189,.2); padding:6px 12px; border-radius:7px; letter-spacing:.05em;}
+  header a.logout:hover{color:var(--text-hi); border-color:var(--cyan-dim);}
+
+  main{
+    position:relative; z-index:1;
+    flex:1;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:10px;
+    padding:20px 16px 60px;
+    text-align:center;
+  }
+  .eyebrow{font-size:11px; letter-spacing:.2em; color:var(--text-dim); text-transform:uppercase; margin-bottom:4px;}
+  .headline{font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:clamp(18px,2.4vw,24px); color:var(--text-mid); margin-bottom:18px;}
+
+  #stage{
+    position:relative;
+    width:min(640px, 90vw);
+    height:min(460px, 90vw);
+  }
+
+  svg#bridges{position:absolute; inset:0; width:100%; height:100%; overflow:visible;}
+  .bridge-path{
+    fill:none; stroke:url(#bridgeGrad); stroke-width:1.6;
+    stroke-dasharray:6 10;
+    animation:flow 2.4s linear infinite;
+    opacity:.75;
+  }
+  @keyframes flow{ to{ stroke-dashoffset:-160; } }
+
+  .orbit-ring{
+    position:absolute; top:50%; left:50%;
+    border:1px solid rgba(47,230,255,0.14); border-radius:50%;
+    transform:translate(-50%,-50%);
+  }
+  .orbit-ring.r1{width:44%; height:44%; animation:spin 46s linear infinite;}
+  .orbit-ring.r2{width:62%; height:62%; border-style:dashed; border-color:rgba(139,123,255,0.14); animation:spin 70s linear infinite reverse;}
+  @keyframes spin{from{transform:translate(-50%,-50%) rotate(0deg);} to{transform:translate(-50%,-50%) rotate(360deg);}}
+
+  #core{
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    width:112px; height:112px; border-radius:50%;
+    z-index:3;
+  }
+  #core .glow{
+    position:absolute; inset:0; border-radius:50%;
+    background:conic-gradient(from 0deg, var(--cyan), var(--violet), var(--teal), var(--cyan));
+    filter:blur(1px);
+    animation:coreSpin 14s linear infinite;
+    box-shadow:0 0 50px 6px rgba(47,230,255,.35), 0 0 90px 20px rgba(139,123,255,.18);
+  }
+  @keyframes coreSpin{to{transform:rotate(360deg);}}
+  #core .face{
+    position:absolute; inset:5px; border-radius:50%;
+    background:radial-gradient(circle at 35% 30%, rgba(20,40,60,.95), var(--void-deep) 75%);
+    display:flex; align-items:center; justify-content:center;
+  }
+  #core .face svg{width:44px; height:44px; color:var(--cyan); filter:drop-shadow(0 0 8px rgba(47,230,255,.6));}
+  #core .label{
+    position:absolute; top:calc(100% + 10px); left:50%; transform:translateX(-50%);
+    font-family:'Space Grotesk',sans-serif; font-size:11px; font-weight:600; letter-spacing:.1em;
+    color:var(--text-mid); white-space:nowrap;
+  }
+
+  .planet{
+    position:absolute; top:50%; left:50%;
+    display:flex; flex-direction:column; align-items:center; gap:10px;
+    text-decoration:none; z-index:3;
+    width:140px;
+  }
+  .planet .orb{
+    width:78px; height:78px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    background:radial-gradient(circle at 32% 28%, rgba(255,255,255,.08), transparent 55%), var(--panel);
+    border:1px solid var(--cyan-dim);
+    box-shadow:0 0 0 rgba(47,230,255,0);
+    transition:box-shadow .25s ease, transform .25s ease, border-color .25s ease;
+  }
+  .planet .orb svg{width:30px; height:30px; color:var(--cyan);}
+  .planet .name{font-family:'Space Grotesk',sans-serif; font-size:12.5px; font-weight:600; letter-spacing:.06em; color:var(--text-hi);}
+  .planet .sub{font-size:9.5px; color:var(--text-dim); letter-spacing:.05em;}
+  .planet:hover .orb{
+    transform:scale(1.07);
+    box-shadow:0 0 30px 4px rgba(47,230,255,.3);
+    border-color:var(--cyan);
+  }
+  .planet.violet .orb{border-color:rgba(139,123,255,.5);}
+  .planet.violet .orb svg{color:var(--violet);}
+  .planet.violet:hover .orb{box-shadow:0 0 30px 4px rgba(139,123,255,.3); border-color:var(--violet);}
+
+  #planet-trading{ transform:translate(calc(-50% - 190px), calc(-50% - 90px)); }
+  #planet-assistant{ transform:translate(calc(-50% + 190px), calc(-50% + 90px)); }
+
+  @media (max-width:720px){
+    #stage{height:auto;}
+    svg#bridges, .orbit-ring{display:none;}
+    #stage{
+      display:flex; flex-direction:column; align-items:center; gap:34px;
+      position:static; width:100%;
+    }
+    #core{position:static; transform:none; margin-bottom:6px;}
+    #core .label{position:static; transform:none; margin-top:10px; display:block;}
+    .planet{position:static; transform:none !important;}
+  }
+
+  footer{position:relative; z-index:1; text-align:center; font-size:10.5px; color:var(--text-dim); padding-bottom:22px; letter-spacing:.04em;}
+</style>
+</head>
+<body>
+
+<div id="stars"></div>
+
+<header>
+  <a class="brand" href="/">
+    <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2v13"/><path d="M6 5c0 3 2 5 6 5s6-2 6-5"/><path d="M6 5l1 5h10l1-5"/><path d="M9 22l3-4 3 4"/></svg>
+    <div class="brand-text">
+      <div class="name">DEEP<span>SEA</span></div>
+      <div class="tagline">TRADE · ANALYZE · EXECUTE</div>
+    </div>
+  </a>
+  <a class="logout" href="/logout">LOGOUT</a>
+</header>
+
+<main>
+  <div class="eyebrow">Mission Control</div>
+  <div class="headline">Boss, kahaan jaana hai?</div>
+
+  <div id="stage">
+    <svg id="bridges" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+      <defs>
+        <linearGradient id="bridgeGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#2fe6ff"/>
+          <stop offset="100%" stop-color="#8b7bff"/>
+        </linearGradient>
+      </defs>
+      <path class="bridge-path" d="M 50 50 Q 32 34, 20 28" vector-effect="non-scaling-stroke"/>
+      <path class="bridge-path" d="M 50 50 Q 68 66, 80 72" vector-effect="non-scaling-stroke"/>
+    </svg>
+
+    <div class="orbit-ring r1"></div>
+    <div class="orbit-ring r2"></div>
+
+    <div id="core">
+      <div class="glow"></div>
+      <div class="face">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2v13"/><path d="M6 5c0 3 2 5 6 5s6-2 6-5"/><path d="M6 5l1 5h10l1-5"/><path d="M9 22l3-4 3 4"/></svg>
+      </div>
+      <div class="label">DEEPSEA CORE</div>
+    </div>
+
+    <a href="/trading" class="planet" id="planet-trading">
+      <div class="orb">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17l6-6 4 4 8-8"/><path d="M14 7h7v7"/></svg>
+      </div>
+      <div class="name">TRADING ROOM</div>
+      <div class="sub">Chart · Risk · Signals</div>
+    </a>
+
+    <a href="/assistant" class="planet violet" id="planet-assistant">
+      <div class="orb">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="7" r="4"/><path d="M2 21v-2a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v2"/><circle cx="18" cy="8" r="3"/></svg>
+      </div>
+      <div class="name">DEEPSEA DASHBOARD</div>
+      <div class="sub">Agents · Voice · Logs</div>
+    </a>
+  </div>
+</main>
+
+<footer>Mission Control — click a planet to enter</footer>
+
+<script>
+  const starField = document.getElementById('stars');
+  for (let i = 0; i < 70; i++) {
+    const s = document.createElement('span');
+    s.style.left = Math.random() * 100 + '%';
+    s.style.top = Math.random() * 100 + '%';
+    s.style.opacity = (Math.random() * 0.7 + 0.15).toFixed(2);
+    starField.appendChild(s);
+  }
+</script>
+
+</body>
+</html>

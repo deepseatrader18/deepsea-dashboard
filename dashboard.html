@@ -79,7 +79,7 @@
     border-bottom:1px solid rgba(47,230,255,0.15);
     background:rgba(6,14,24,0.6);
   }
-  .brand{display:flex; align-items:center; gap:10px;}
+  .brand{display:flex; align-items:center; gap:10px; text-decoration:none; color:inherit;}
   .brand-icon{width:26px; height:26px; color:var(--cyan);}
   .brand-text .name{font-family:'Space Grotesk'; font-weight:700; letter-spacing:3px; font-size:15px; line-height:1;}
   .brand-text .name span{color:var(--cyan);}
@@ -266,13 +266,13 @@
     </div>
 
     <div id="topbar">
-      <div class="brand">
+      <a class="brand" href="/" title="Back to Mission Control">
         <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2v13"/><path d="M6 5c0 3 2 5 6 5s6-2 6-5"/><path d="M6 5l1 5h10l1-5"/><path d="M9 22l3-4 3 4"/></svg>
         <div class="brand-text">
           <div class="name">DEEP<span>SEA</span></div>
           <div class="tagline">TRADE · ANALYZE · EXECUTE</div>
         </div>
-      </div>
+      </a>
       <div class="status-cluster">
         <div class="status-chip" id="chip-mt5"><span class="led"></span>MT5 BRIDGE</div>
         <div class="status-chip" id="chip-gmail"><span class="led"></span>MERCURY GMAIL</div>
@@ -618,8 +618,8 @@
     // always also log a clickable link so there's a guaranteed way to open
     // it even if the automatic tab didn't appear.
     window.open(match.url, '_blank');
-    logLine('DEEPSEA', `${match.name} खोल रहा हूँ। अगर नया टैब न खुले तो <a href="${match.url}" target="_blank" style="color:var(--accent, #35c7ff)">यहाँ क्लिक करें</a>।`);
-    speak(`जी, ${match.name} खोल रहा हूँ।`);
+    logLine('DEEPSEA', `हाँ बॉस, मैं ${match.name} खोल रही हूँ। अगर नया टैब न खुले तो <a href="${match.url}" target="_blank" style="color:var(--accent, #35c7ff)">यहाँ क्लिक करें</a>।`);
+    speak(`हाँ बॉस, मैं ${match.name} खोल रही हूँ।`);
     return true;
   }
 
@@ -699,8 +699,8 @@
       if (hasWakeWord(spokenText)) {
         awaitingCommand = true;
         recognition.lang = 'hi-IN';
-        micStatus.textContent = 'Ji, boliye...';
-        speak('जी, बोलिए');
+        micStatus.textContent = 'Ji Boss, boliye...';
+        speak('जी बॉस, बोलिए');
       }
     };
 
