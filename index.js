@@ -466,6 +466,67 @@ app.post('/api/laptop-remote/executed', requireBridgeToken, (req, res) => {
   res.json({ ok: true });
 });
 
+// Autonomous coding-agent mailbox: the user submits a coding/design
+// instruction ("DeepSea, code karo: ...") from the dashboard or WhatsApp;
+// a recurring Claude Code Routine polls /next roughly every hour (the
+// platform's minimum interval), does the actual work (edit, commit, push,
+// open a PR) in its own session, then posts
+// the outcome to /result. The WhatsApp bridge separately polls /status to
+// deliver that outcome back to the user as a message. Single-slot and
+// in-memory on purpose — one household, one pending coding request at a
+// time is enough, and it avoids a database for something this small.
+let codeRequest = null;
+// { id, text, status: 'pending'|'claimed'|'done', ok, summary, delivered, createdAt }
+const CODE_REQUEST_STALE_MS = 24 * 60 * 60 * 1000;
+
+function isCodeRequestStale() {
+  return !codeRequest || Date.now() - codeRequest.createdAt > CODE_REQUEST_STALE_MS;
+}
+
+function submitCodeRequest(text) {
+  codeRequest = { id: crypto.randomUUID(), text, status: 'pending', createdAt: Date.now(), delivered: false };
+  return codeRequest.id;
+}
+
+app.post('/api/code-request', requireAuth, (req, res) => {
+  const text = ((req.body && req.body.text) || '').trim();
+  if (!text) return res.status(400).json({ error: 'No text provided' });
+  res.json({ id: submitCodeRequest(text) });
+});
+
+// Same submission, authenticated with the shared bridge token instead of a
+// dashboard session — for the WhatsApp bridge, which has no browser login.
+app.post('/api/bridge/code-request', requireBridgeToken, (req, res) => {
+  const text = ((req.body && req.body.text) || '').trim();
+  if (!text) return res.status(400).json({ error: 'No text provided' });
+  res.json({ id: submitCodeRequest(text) });
+});
+
+app.get('/api/code-request/next', requireBridgeToken, (req, res) => {
+  if (isCodeRequestStale() || codeRequest.status !== 'pending') return res.json({ pending: false });
+  codeRequest.status = 'claimed';
+  res.json({ pending: true, id: codeRequest.id, text: codeRequest.text });
+});
+
+app.post('/api/code-request/result', requireBridgeToken, (req, res) => {
+  const { id, ok, summary } = req.body || {};
+  if (!isCodeRequestStale() && codeRequest.id === id) {
+    codeRequest.status = 'done';
+    codeRequest.ok = !!ok;
+    codeRequest.summary = summary || '';
+    codeRequest.delivered = false;
+  }
+  res.json({ ok: true });
+});
+
+app.get('/api/code-request/status', requireBridgeToken, (req, res) => {
+  if (isCodeRequestStale() || codeRequest.status !== 'done' || codeRequest.delivered) {
+    return res.json({ ready: false });
+  }
+  codeRequest.delivered = true;
+  res.json({ ready: true, text: codeRequest.text, ok: codeRequest.ok, summary: codeRequest.summary });
+});
+
 app.post('/api/chat', requireAuth, async (req, res) => {
   const userText = (req.body && req.body.text) || '';
   if (!userText.trim()) {

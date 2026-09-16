@@ -49,6 +49,31 @@ function checkForSelfUpdate() {
 
 setInterval(checkForSelfUpdate, SELF_UPDATE_CHECK_MS);
 
+// Remembers the last chat the bridge saw a real command in, so the coding-
+// agent result poller below (which has no incoming message to reply to)
+// still knows where to proactively deliver its "ho gaya" message.
+let lastChatId = ALLOWED_CHAT_ID || null;
+
+const CODE_RESULT_POLL_MS = 30000;
+
+async function checkForCodeResult() {
+  if (!lastChatId) return; // haven't seen a message from the user yet this run
+  try {
+    const res = await fetch(`${DASHBOARD_CHAT_URL}/api/code-request/status`, {
+      headers: { 'x-bridge-token': BRIDGE_TOKEN },
+      signal: AbortSignal.timeout(10000)
+    });
+    const data = await res.json();
+    if (!data.ready) return;
+    const header = data.ok ? 'Ho gaya, Boss' : 'Ye nahi ho paya, Boss';
+    await sendAndTrack(lastChatId, `${header}\n"${data.text}"\n\n${data.summary || ''}`.trim());
+  } catch (err) {
+    console.error('Code-result poll failed:', err.message);
+  }
+}
+
+setInterval(checkForCodeResult, CODE_RESULT_POLL_MS);
+
 const BRIDGE_TOKEN = process.env.WHATSAPP_BRIDGE_TOKEN;
 const DASHBOARD_CHAT_URL = process.env.DASHBOARD_CHAT_URL || 'https://deepsea-dashboard.onrender.com';
 const ALLOWED_CHAT_ID = process.env.ALLOWED_WHATSAPP_CHAT_ID || null;
@@ -141,6 +166,7 @@ client.on('message_create', async msg => {
     console.log(`[debug] chat not allowed (expected ${ALLOWED_CHAT_ID || 'from===to'}, got from=${msg.from} to=${msg.to}) — skipping`);
     return;
   }
+  lastChatId = chatId;
 
   const body = (msg.body || '').trim();
   const lower = body.toLowerCase();
@@ -179,6 +205,31 @@ client.on('message_create', async msg => {
   const commandText = body.slice(WAKE_WORD.length).trim() || body;
 
   console.log(`-> Command: ${commandText}`);
+
+  // "deepsea code karo: ..." / "deepsea code: ..." submits a coding/design
+  // instruction to the autonomous coding-agent mailbox on the dashboard
+  // server instead of treating it as a laptop command or a chat question.
+  // A separate Claude Code Routine polls that mailbox roughly every hour
+  // (the platform's minimum interval for a recurring Routine) and does the
+  // actual work (edit, commit, push, open a PR); pollForCodeResult() below
+  // delivers the outcome back here once it's done.
+  const codeMatch = commandText.match(/^code\s*(?:karo)?\s*:?\s*(.+)/i);
+  if (codeMatch) {
+    const instruction = codeMatch[1].trim();
+    try {
+      await fetch(`${DASHBOARD_CHAT_URL}/api/bridge/code-request`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-bridge-token': BRIDGE_TOKEN },
+        body: JSON.stringify({ text: instruction }),
+        signal: AbortSignal.timeout(10000)
+      });
+      await sendAndTrack(msg.to, `Ji Boss, ye coding request note kar li: "${instruction}". Agle check (~1 ghante mein) mein isse kaam shuru karungi, ho jaane par bata dungi.`);
+    } catch (err) {
+      console.error('Code-request submit failed:', err.message);
+      await sendAndTrack(msg.to, 'Coding request submit nahi ho payi — dashboard se connect nahi ho pa raha, thodi der mein try karo.');
+    }
+    return;
+  }
 
   // Try it as a laptop command first (Chrome, lock, media, etc. — the same
   // things assistant.py understands by voice). If assistant.py isn't
