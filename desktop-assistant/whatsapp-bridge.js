@@ -49,6 +49,64 @@ function checkForSelfUpdate() {
 
 setInterval(checkForSelfUpdate, SELF_UPDATE_CHECK_MS);
 
+// Instant coding path: if the user has installed and logged into Claude
+// Code on this laptop (a one-time manual setup — see README) and then
+// explicitly confirms with "haan", "code karo" requests run right here,
+// instead of queueing on the cloud mailbox. Local means no network
+// round-trip and no polling wait; the confirmation step means nothing on
+// the real laptop ever runs unattended off a stray or misread message.
+const LOCAL_CLAUDE_TIMEOUT_MS = 15 * 60 * 1000;
+
+function isLocalClaudeCodeAvailable() {
+  try {
+    execSync('claude --version', { cwd: PROJECT_DIR, stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function runLocalClaudeCode(instruction) {
+  return new Promise((resolve) => {
+    const prompt = `You are DeepSea's local coding assistant, running directly on the user's own laptop with access to this git repository (deepsea-dashboard). The user explicitly confirmed this request, in their own words (Hindi/Hinglish):\n\n"${instruction}"\n\nImplement it on a feature branch (create one off latest main if needed) and commit your changes with a clear message. Never commit or push directly to main — push your branch and open a pull request for review instead, same as this repo's standing convention. If the request is unclear, unsafe, or outside this repo's scope, do not guess — explain why instead of acting. End your reply with one short line in Hindi/Hinglish summarizing what you did (or why not) and the PR link if you opened one, suitable to read aloud over WhatsApp.`;
+
+    // Scoped tool allowlist, not --dangerously-skip-permissions: this can
+    // edit files and run git/npm in the repo, but nothing broader (no
+    // arbitrary shell, no system commands) — even after the user's "haan",
+    // a misheard or ambiguous instruction can't do real damage outside
+    // this project.
+    const child = spawn('claude', [
+      '-p', prompt,
+      '--allowedTools', 'Read,Edit,Write,Glob,Grep,Bash(git *),Bash(npm *)'
+    ], {
+      cwd: PROJECT_DIR,
+      env: process.env
+    });
+
+    let out = '';
+    let err = '';
+    const timer = setTimeout(() => {
+      child.kill();
+      resolve({ ok: false, summary: 'Time out ho gaya (15 min se zyada le rahi thi) — thoda chhota ya clear instruction try karo.' });
+    }, LOCAL_CLAUDE_TIMEOUT_MS);
+
+    child.stdout.on('data', d => { out += d.toString(); });
+    child.stderr.on('data', d => { err += d.toString(); });
+    child.on('error', (e) => {
+      clearTimeout(timer);
+      resolve({ ok: false, summary: `Local Claude Code chalane mein error: ${e.message}` });
+    });
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      if (code === 0) {
+        resolve({ ok: true, summary: out.trim().slice(-1500) || 'Ho gaya.' });
+      } else {
+        resolve({ ok: false, summary: (err || out).trim().slice(-1500) || `Exit code ${code}` });
+      }
+    });
+  });
+}
+
 // Remembers the last chat the bridge saw a real command in, so the coding-
 // agent result poller below (which has no incoming message to reply to)
 // still knows where to proactively deliver its "ho gaya" message.
@@ -87,6 +145,10 @@ const REMOTE_CONFIRM_WINDOW_MS = 60000;
 // "anything that isn't a clear yes counts as no" rule, just over WhatsApp
 // instead of the mic.
 let pendingCommand = null;
+
+// Same idea, for a "code karo" instruction waiting on a "haan" before the
+// local Claude Code agent (see below) is actually allowed to touch files.
+let pendingCodeRequest = null;
 
 // This is a self-bot in a self-chat, so every message the bridge itself
 // sends (the "pakka?" prompt, "Ho gaya: ...", etc.) comes back through
@@ -171,6 +233,26 @@ client.on('message_create', async msg => {
   const body = (msg.body || '').trim();
   const lower = body.toLowerCase();
 
+  // A "code karo" request is waiting on a "haan" before the local Claude
+  // Code agent is allowed to run — checked ahead of pendingCommand since
+  // only one thing is ever pending at a time.
+  if (pendingCodeRequest && Date.now() < pendingCodeRequest.expiresAt) {
+    const pending = pendingCodeRequest;
+    pendingCodeRequest = null;
+    const isConfirm = CONFIRM_WORDS.some(w => lower === w || lower.startsWith(w + ' '));
+    if (!isConfirm) {
+      console.log(`[debug] pending code request cancelled by reply: "${body}"`);
+      await sendAndTrack(msg.to, `Cancelled: ${pending.instruction}`);
+      return;
+    }
+    await sendAndTrack(msg.to, `Ji Boss, ab shuru kar rahi hoon: "${pending.instruction}". Ho jaane par batati hoon.`);
+    runLocalClaudeCode(pending.instruction).then(async (result) => {
+      const header = result.ok ? 'Ho gaya, Boss' : 'Ye nahi ho paya, Boss';
+      await sendAndTrack(msg.to, `${header}\n${result.summary}`);
+    });
+    return;
+  }
+
   // A laptop command is waiting on a "haan" — this reply doesn't need the
   // "deepsea" wake word again, same as it wouldn't need it a second time
   // when confirming by voice.
@@ -206,16 +288,22 @@ client.on('message_create', async msg => {
 
   console.log(`-> Command: ${commandText}`);
 
-  // "deepsea code karo: ..." / "deepsea code: ..." submits a coding/design
-  // instruction to the autonomous coding-agent mailbox on the dashboard
-  // server instead of treating it as a laptop command or a chat question.
-  // A separate Claude Code Routine polls that mailbox roughly every hour
-  // (the platform's minimum interval for a recurring Routine) and does the
-  // actual work (edit, commit, push, open a PR); pollForCodeResult() below
-  // delivers the outcome back here once it's done.
+  // "deepsea code karo: ..." / "deepsea code: ..." hands a coding/design
+  // instruction to a local Claude Code agent on this laptop, but only after
+  // an explicit "haan" (see pendingCodeRequest above) — never unattended.
+  // Falls back to the old cloud mailbox (checked roughly hourly by a
+  // separate Claude Code Routine, no confirmation needed since it only
+  // opens a PR for review) if Claude Code isn't set up on this machine yet.
   const codeMatch = commandText.match(/^code\s*(?:karo)?\s*:?\s*(.+)/i);
   if (codeMatch) {
     const instruction = codeMatch[1].trim();
+
+    if (isLocalClaudeCodeAvailable()) {
+      pendingCodeRequest = { instruction, expiresAt: Date.now() + REMOTE_CONFIRM_WINDOW_MS };
+      await sendAndTrack(msg.to, `Aapne bola: "${instruction}". Isse local Claude Code se turant karwau? 60 second ke andar "haan" likho.`);
+      return;
+    }
+
     try {
       await fetch(`${DASHBOARD_CHAT_URL}/api/bridge/code-request`, {
         method: 'POST',
