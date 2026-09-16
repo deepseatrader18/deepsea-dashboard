@@ -5,17 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>DEEPSEA</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --void:#050a12;
     --void-deep:#02060b;
-    --panel:#0a1626;
-    --panel-edge:rgba(47,230,255,0.22);
+    --panel:rgba(9,18,30,0.6);
     --cyan:#2fe6ff;
     --cyan-dim:rgba(47,230,255,0.45);
     --teal:#17e8b0;
-    --gold:#e0b64a;
     --amber:#ffb020;
     --danger:#ff4d5e;
     --text-hi:#e6f4fb;
@@ -23,211 +20,296 @@
     --text-dim:#4c6377;
   }
   *{box-sizing:border-box; margin:0; padding:0;}
+  a{color:var(--cyan); text-decoration:none;} a:hover{color:var(--text-hi);}
   html,body{height:100%;}
   body{
     background:
-      radial-gradient(ellipse at 20% 10%, rgba(23,60,90,0.35), transparent 55%),
-      radial-gradient(ellipse at 85% 90%, rgba(23,232,176,0.05), transparent 50%),
+      repeating-linear-gradient(0deg, rgba(47,230,255,0.025) 0px, rgba(47,230,255,0.025) 1px, transparent 1px, transparent 3px),
+      radial-gradient(ellipse at 18% 8%, rgba(23,60,90,0.4), transparent 55%),
+      radial-gradient(ellipse at 88% 92%, rgba(23,232,176,0.06), transparent 50%),
       var(--void-deep);
     color:var(--text-hi);
-    font-family:'Inter', sans-serif;
+    font-family:'Space Grotesk', sans-serif;
     overflow:hidden;
+    position:relative;
     height:100vh;
   }
   .mono{font-family:'JetBrains Mono', monospace;}
-  .head-font{font-family:'Space Grotesk', sans-serif;}
+  @keyframes spin{ from{ transform:translate(-50%,-50%) rotate(0deg);} to{ transform:translate(-50%,-50%) rotate(360deg);} }
+  @keyframes blink{0%,100%{opacity:1;} 50%{opacity:.25;}}
+
+  #grid-overlay{
+    position:fixed; inset:0; pointer-events:none; z-index:50;
+    background-image:
+      linear-gradient(rgba(47,230,255,0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(47,230,255,0.035) 1px, transparent 1px);
+    background-size:64px 64px;
+    mix-blend-mode:screen;
+  }
 
   #dashboard{
     display:grid;
     height:100vh;
-    grid-template-columns: 84px 280px 1fr 300px;
-    grid-template-rows: 62px 1fr 100px;
-    grid-template-areas:
-      "sidebar topbar  topbar topbar"
-      "sidebar network chart  right"
-      "sidebar feed    feed   right";
+    grid-template-columns: 1fr;
+    grid-template-rows: 54px 1fr 92px;
+    grid-template-areas: "topbar" "main" "feed";
   }
 
-  #sidebar{
-    grid-area:sidebar;
-    background:rgba(6,12,22,0.8);
-    border-right:1px solid rgba(47,230,255,0.12);
-    display:flex; flex-direction:column; align-items:center;
-    padding:18px 0;
-    gap:6px;
-  }
-  .side-item{
-    width:100%;
-    display:flex; flex-direction:column; align-items:center; gap:4px;
-    padding:10px 0;
-    color:var(--text-dim);
-    cursor:pointer;
-    border-left:2px solid transparent;
-    transition:color .2s ease, background .2s ease;
-    text-decoration:none;
-  }
-  .side-item svg{width:19px; height:19px;}
-  .side-item span{font-size:9.5px; font-family:'Space Grotesk'; letter-spacing:0.5px;}
-  .side-item:hover{color:var(--text-hi);}
-  .side-item.active{color:var(--cyan); border-left-color:var(--cyan); background:rgba(47,230,255,0.06);}
-  .side-gap{flex:1;}
-
+  /* ---------- top strip ---------- */
   #topbar{
-    grid-area:topbar;
-    display:flex; align-items:center; justify-content:space-between;
-    padding:0 22px;
-    border-bottom:1px solid rgba(47,230,255,0.15);
-    background:rgba(6,14,24,0.6);
+    grid-area:topbar; display:flex; align-items:center; justify-content:space-between;
+    padding:0 18px; border-bottom:1px solid rgba(47,230,255,0.18);
+    background:rgba(5,12,20,0.7);
   }
-  .brand{display:flex; align-items:center; gap:10px; text-decoration:none; color:inherit;}
-  .brand-icon{width:26px; height:26px; color:var(--cyan);}
-  .brand-text .name{font-family:'Space Grotesk'; font-weight:700; letter-spacing:3px; font-size:15px; line-height:1;}
-  .brand-text .name span{color:var(--cyan);}
-  .brand-text .tagline{font-size:8.5px; color:var(--text-dim); letter-spacing:2px; margin-top:2px;}
-  #topbar .status-cluster{display:flex; gap:20px;}
-  .status-chip{
-    display:flex; align-items:center; gap:6px;
-    font-size:10.5px; color:var(--text-mid); letter-spacing:0.5px;
-  }
-  .status-chip .led{width:6px; height:6px; border-radius:50%; background:var(--text-dim);}
+  .brand{display:flex; align-items:center; gap:8px;}
+  .brand-icon{width:20px; height:20px; color:var(--cyan); filter:drop-shadow(0 0 6px rgba(47,230,255,0.6));}
+  .brand-text{font-weight:700; letter-spacing:3px; font-size:13px;}
+  .brand-text span{color:var(--cyan);}
+  .top-nav{display:flex; gap:16px; margin-left:24px;}
+  .top-nav a, .top-nav div{display:flex; cursor:default;}
+  .top-nav a{cursor:pointer;}
+  .top-nav svg{width:15px; height:15px; color:var(--text-dim);}
+  .top-nav .active svg{color:var(--cyan);}
+  .top-nav a:hover svg{color:var(--text-hi);}
+  .status-cluster{display:flex; gap:18px; flex:1; justify-content:center;}
+  .status-chip{display:flex; align-items:center; gap:6px; font-size:9px; color:var(--text-mid); letter-spacing:1px;}
+  .status-chip .led{width:5px; height:5px; border-radius:50%; background:var(--text-dim);}
   .status-chip.on .led{background:var(--teal); box-shadow:0 0 8px 1px var(--teal);}
   .status-chip.warn .led{background:var(--amber); box-shadow:0 0 8px 1px var(--amber);}
   .top-right{display:flex; align-items:center; gap:16px;}
-  #clock{font-family:'JetBrains Mono'; font-size:12px; color:var(--text-mid);}
-  #logout-link{
-    font-family:'Space Grotesk'; font-size:10.5px; letter-spacing:1px; color:var(--text-dim);
-    text-decoration:none; border:1px solid rgba(143,168,189,0.25); padding:5px 10px;
-  }
-
-  .panel{
-    background:rgba(9,18,30,0.55);
-    border:1px solid rgba(47,230,255,0.14);
-    padding:14px 14px 12px;
-  }
-  .panel-title{
-    font-family:'Space Grotesk'; font-size:10.5px; letter-spacing:2px;
-    color:var(--text-mid); margin-bottom:10px; display:flex; align-items:center; gap:8px;
-  }
-  .panel-title .led{width:6px; height:6px; border-radius:50%; background:var(--teal); box-shadow:0 0 6px 1px var(--teal);}
-
-  #network-col{
-    grid-area:network;
-    border-right:1px solid rgba(47,230,255,0.12);
-    padding:16px 14px;
-    display:flex; flex-direction:column; gap:14px;
-    overflow-y:auto;
-  }
-  #orbit-wrap{
-    position:relative;
-    width:100%;
-    height:250px;
-    flex-shrink:0;
-  }
-  .orbit-ring{
-    position:absolute; top:50%; left:50%;
-    border:1px solid rgba(47,230,255,0.12); border-radius:50%;
-    transform:translate(-50%,-50%);
-  }
-  .orbit-ring.r1{width:190px; height:190px; animation:spin 50s linear infinite;}
-  .orbit-ring.r2{width:230px; height:230px; border-style:dashed; animation:spin 80s linear infinite reverse;}
-  @keyframes spin{from{transform:translate(-50%,-50%) rotate(0deg);} to{transform:translate(-50%,-50%) rotate(360deg);}}
-  #core-logo{
-    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
-    width:64px; height:64px; border-radius:50%;
-    background:radial-gradient(circle, rgba(47,230,255,0.18), rgba(9,18,30,0.9));
-    border:1px solid var(--cyan);
-    display:flex; align-items:center; justify-content:center;
-    box-shadow:0 0 24px rgba(47,230,255,0.25);
-  }
-  #core-logo svg{width:30px; height:30px; color:var(--cyan);}
-  .agent-node{
-    position:absolute; top:50%; left:50%;
-    display:flex; flex-direction:column; align-items:center; gap:3px;
-    width:64px;
-  }
-  .agent-node .bubble{
-    width:38px; height:38px; border-radius:50%;
-    background:rgba(9,18,30,0.9);
-    border:1px solid rgba(47,230,255,0.3);
-    display:flex; align-items:center; justify-content:center;
-    font-size:16px;
-  }
-  .agent-node .bubble .led{
-    position:absolute; width:7px; height:7px; border-radius:50%;
-    background:var(--text-dim);
-    transform:translate(11px,-11px);
-  }
-  .agent-node .bubble .led.online{
-    background:var(--teal); box-shadow:0 0 6px 1px var(--teal);
-  }
-  .agent-node .lbl{font-size:8.5px; color:var(--text-mid); text-align:center; line-height:1.2; font-family:'Space Grotesk';}
-
-  .stat-row{display:flex; justify-content:space-between; font-size:11px; padding:5px 0; border-top:1px solid rgba(143,168,189,0.08);}
-  .stat-row .k{color:var(--text-dim);}
-  .stat-row .v{font-family:'JetBrains Mono'; color:var(--text-hi);}
-
-  #mic-panel{display:flex; align-items:center; gap:12px;}
+  #mic-compact{display:flex; align-items:center; gap:8px;}
   #mic-btn{
-    width:42px; height:42px; flex-shrink:0;
-    border-radius:50%;
-    border:1px solid var(--cyan);
-    background:rgba(47,230,255,0.05);
-    color:var(--cyan);
-    cursor:pointer;
-    display:flex; align-items:center; justify-content:center;
+    width:26px; height:26px; flex-shrink:0; border-radius:50%;
+    border:1px solid var(--cyan); background:rgba(47,230,255,0.05); color:var(--cyan);
+    cursor:pointer; display:flex; align-items:center; justify-content:center;
     transition:background .2s ease, box-shadow .2s ease;
   }
-  #mic-btn svg{width:18px; height:18px;}
+  #mic-btn svg{width:12px; height:12px;}
   #mic-btn.idle-listening{ animation:mic-idle-pulse 2.6s ease-out infinite; }
-  #mic-btn.listening{
-    background:var(--cyan); color:#031014;
-    animation:mic-pulse 1.4s ease-out infinite;
-  }
-  @keyframes mic-pulse{0%{box-shadow:0 0 0 0 rgba(47,230,255,0.45);} 100%{box-shadow:0 0 0 16px rgba(47,230,255,0);}}
-  @keyframes mic-idle-pulse{0%{box-shadow:0 0 0 0 rgba(47,230,255,0.3);} 100%{box-shadow:0 0 0 10px rgba(47,230,255,0);}}
-  #mic-status{font-size:10.5px; color:var(--text-dim); font-family:'JetBrains Mono';}
+  #mic-btn.listening{ background:var(--cyan); color:#031014; animation:mic-pulse 1.4s ease-out infinite; }
+  @keyframes mic-pulse{0%{box-shadow:0 0 0 0 rgba(47,230,255,0.45);} 100%{box-shadow:0 0 0 12px rgba(47,230,255,0);}}
+  @keyframes mic-idle-pulse{0%{box-shadow:0 0 0 0 rgba(47,230,255,0.3);} 100%{box-shadow:0 0 0 8px rgba(47,230,255,0);}}
+  #mic-status{font-size:9px; color:var(--text-dim); letter-spacing:.5px; max-width:130px;}
+  #clock{font-size:11px; color:var(--text-mid); letter-spacing:1px;}
+  #logout-link{font-size:9px; letter-spacing:2px; color:var(--text-dim); border:1px solid rgba(143,168,189,0.3); padding:4px 10px;}
 
-  #chart-col{
-    grid-area:chart;
-    padding:12px;
-    display:flex; flex-direction:column;
+  /* ---------- HUD panel frame ---------- */
+  .hud-frame{
+    position:relative;
+    background:
+      linear-gradient(180deg, transparent 0%, rgba(47,230,255,0.07) 8%, transparent 17%) top / 100% 640%,
+      var(--panel);
+    background-repeat:no-repeat, no-repeat;
+    animation:sweep 7s linear infinite;
+    border:1px solid rgba(47,230,255,0.22);
+    clip-path:polygon(0 8px, 8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%);
+    box-shadow:inset 0 0 26px rgba(47,230,255,0.045);
+    padding:10px 12px;
   }
-  #chart-widget-wrap{flex:1; min-height:0;}
+  @keyframes sweep{ 0%{ background-position: 0 -120%, 0 0; } 100%{ background-position: 0 520%, 0 0; } }
+  .hud-frame::before, .hud-frame::after, .hud-frame .br-tl, .hud-frame .br-br{
+    content:''; position:absolute; width:12px; height:12px; pointer-events:none; z-index:2;
+  }
+  .hud-frame::before{ top:-1px; left:-1px; border-top:2px solid var(--cyan); border-left:2px solid var(--cyan); opacity:0.8; }
+  .hud-frame::after{ bottom:-1px; right:-1px; border-bottom:2px solid var(--cyan); border-right:2px solid var(--cyan); opacity:0.8; }
+  .hud-frame .br-tl{ top:-1px; right:7px; border-top:2px solid rgba(47,230,255,0.35); width:18px; height:0; }
+  .hud-frame .br-br{ bottom:-1px; left:7px; border-bottom:2px solid rgba(47,230,255,0.35); width:18px; height:0; }
+  .hud-frame.amber{ border-color:rgba(255,176,32,0.3); }
+  .hud-frame.amber::before{ border-color:var(--amber); }
+  .hud-frame.amber::after{ border-color:var(--amber); }
 
-  #right-col{
-    grid-area:right;
-    border-left:1px solid rgba(47,230,255,0.12);
-    padding:14px;
-    display:flex; flex-direction:column; gap:12px;
-    overflow-y:auto;
+  .panel-title{
+    font-size:9px; letter-spacing:2.5px; font-weight:700;
+    color:var(--text-mid); margin-bottom:8px; display:flex; align-items:center; gap:6px;
   }
-  .agent-row{
-    display:flex; align-items:center; justify-content:space-between;
-    padding:8px 10px;
-    background:rgba(255,255,255,0.015);
-    border:1px solid rgba(143,168,189,0.1);
-    font-size:11.5px;
+  .panel-title .led{width:5px; height:5px; border-radius:50%; background:var(--teal); box-shadow:0 0 7px 1px var(--teal);}
+  .panel-title.warn .led{background:var(--amber); box-shadow:0 0 7px 1px var(--amber);}
+  .panel-title .tick{flex:1; height:1px; background:linear-gradient(90deg, rgba(47,230,255,0.35), transparent);}
+
+  /* ---------- main 3-column grid ---------- */
+  #main{
+    grid-area:main; display:grid; gap:12px; padding:12px; min-height:0;
+    grid-template-columns: 300px 370px 1fr;
   }
-  .agent-row .name{display:flex; align-items:center; gap:7px;}
-  .agent-row .led{width:6px; height:6px; border-radius:50%; background:var(--text-dim);}
+  .col{ display:flex; flex-direction:column; gap:12px; min-height:0; overflow-y:auto; }
+  .col::-webkit-scrollbar{width:0;}
+
+  /* ---------- dot-matrix globes ---------- */
+  .globe-wrap{ position:relative; flex:1; display:flex; align-items:center; justify-content:center; min-height:0; }
+  .dot-globe{
+    position:relative; border-radius:50%; overflow:hidden; flex-shrink:0;
+    background:
+      radial-gradient(circle at 32% 26%, rgba(170,245,255,0.4), transparent 45%),
+      radial-gradient(ellipse 34% 22% at 30% 62%, rgba(6,40,50,0.85), transparent 70%),
+      radial-gradient(ellipse 26% 18% at 68% 30%, rgba(6,40,50,0.8), transparent 70%),
+      radial-gradient(ellipse 20% 30% at 62% 72%, rgba(6,40,50,0.75), transparent 70%),
+      radial-gradient(ellipse 16% 14% at 45% 42%, rgba(6,40,50,0.7), transparent 70%),
+      radial-gradient(rgba(47,230,255,0.95) 1px, transparent 1.4px),
+      radial-gradient(circle, rgba(47,230,255,0.32), rgba(9,18,30,0.98) 72%);
+    background-size:auto, auto, auto, auto, auto, 6px 6px, auto;
+    animation:globe-spin 16s linear infinite;
+    border:1px solid rgba(47,230,255,0.55);
+    box-shadow:0 0 28px rgba(47,230,255,0.3), inset -18px -16px 30px rgba(0,0,0,0.75);
+  }
+  .dot-globe.amber{
+    border-color:rgba(255,176,32,0.5);
+    background:
+      radial-gradient(circle at 32% 26%, rgba(255,214,150,0.4), transparent 45%),
+      radial-gradient(ellipse 34% 22% at 30% 62%, rgba(48,26,4,0.85), transparent 70%),
+      radial-gradient(ellipse 26% 18% at 68% 30%, rgba(48,26,4,0.8), transparent 70%),
+      radial-gradient(ellipse 20% 30% at 62% 72%, rgba(48,26,4,0.75), transparent 70%),
+      radial-gradient(ellipse 16% 14% at 45% 42%, rgba(48,26,4,0.7), transparent 70%),
+      radial-gradient(rgba(255,176,32,0.95) 1px, transparent 1.4px),
+      radial-gradient(circle, rgba(255,176,32,0.3), rgba(20,12,4,0.98) 72%);
+    background-size:auto, auto, auto, auto, auto, 6px 6px, auto;
+    box-shadow:0 0 28px rgba(255,176,32,0.28), inset -18px -16px 30px rgba(0,0,0,0.75);
+  }
+  @keyframes globe-spin{ from{ background-position:0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0; } to{ background-position:0 0, -60px 0, -60px 0, -60px 0, -60px 0, 132px 0, 0 0; } }
+  .globe-ticks{ position:absolute; top:50%; left:50%; width:0; height:0; }
+  .globe-ticks i{ position:absolute; width:1px; background:rgba(47,230,255,0.4); }
+  .globe-ticks i::before{
+    content:''; position:absolute; top:-3px; left:-2.5px; width:6px; height:6px;
+    border-radius:1px; background:rgba(47,230,255,0.85); box-shadow:0 0 5px rgba(47,230,255,0.6);
+    transform:rotate(45deg);
+  }
+  .globe-wrap.amber .globe-ticks i{ background:rgba(255,176,32,0.4); }
+  .globe-wrap.amber .globe-ticks i::before{ background:rgba(255,176,32,0.85); box-shadow:0 0 5px rgba(255,176,32,0.6); }
+  .globe-core{
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); z-index:2;
+    color:var(--cyan); filter:drop-shadow(0 0 6px rgba(6,14,22,0.95)) drop-shadow(0 0 3px rgba(6,14,22,0.95));
+  }
+  .globe-readout{ position:absolute; display:flex; flex-direction:column; }
+  .globe-readout .lbl{font-size:7.5px; letter-spacing:1.5px; color:var(--text-dim);}
+  .globe-readout .val{font-family:'JetBrains Mono'; font-size:12px; color:var(--cyan); text-shadow:0 0 6px rgba(47,230,255,0.5);}
+  .globe-wrap.amber .globe-readout .val{color:var(--amber); text-shadow:0 0 6px rgba(255,176,32,0.5);}
+
+  /* ---------- gauge dials ---------- */
+  .gauge-row{ display:flex; gap:10px; flex:0 0 130px; }
+  .gauge-dial{ position:relative; width:88px; height:88px; margin:auto; }
+  .gauge-dial svg{ width:100%; height:100%; transform:rotate(-90deg); }
+  .gauge-dial .val{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; flex-direction:column; }
+  .gauge-dial .val b{ font-family:'JetBrains Mono'; font-size:17px; color:var(--text-hi); font-weight:500; }
+  .gauge-dial .val span{ font-size:7px; letter-spacing:1.5px; color:var(--text-dim); margin-top:2px; }
+
+  /* ---------- stat tiles ---------- */
+  .stat-tiles{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; flex:0 0 auto; }
+  .stat-tile{
+    border:1px solid rgba(47,230,255,0.2); background:rgba(255,255,255,0.02);
+    padding:7px 10px; clip-path:polygon(0 6px,6px 0,100% 0,100% 100%,0 100%);
+  }
+  .stat-tile .k{font-size:7.5px; letter-spacing:1.5px; color:var(--text-dim);}
+  .stat-tile .v{font-family:'JetBrains Mono'; font-size:13px; color:var(--text-hi); margin-top:3px;}
+
+  /* ---------- waveform panels ---------- */
+  .wave-panel{ flex:1; display:flex; flex-direction:column; min-height:0; }
+  .wave-panel .rd{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px; }
+  .wave-panel .rd b{ font-family:'JetBrains Mono'; font-size:16px; color:var(--text-hi); font-weight:500; }
+  .wave-panel .rd span{ font-size:9px; color:var(--text-dim); letter-spacing:1px; }
+  .wave-panel svg{ flex:1; width:100%; min-height:0; }
+
+  /* ---------- signal matrix ---------- */
+  .signal-matrix{ display:grid; grid-template-columns:repeat(6,1fr); grid-auto-rows:1fr; gap:3px; flex:1; }
+  .signal-cell{ border-radius:1px; }
+  .signal-cell.hi{ background:var(--teal); box-shadow:0 0 5px rgba(23,232,176,0.5); }
+  .signal-cell.md{ background:rgba(255,176,32,0.75); }
+  .signal-cell.lo{ background:rgba(255,77,94,0.55); }
+  .signal-cell.off{ background:rgba(76,99,119,0.22); }
+
+  /* ---------- agent status square grid (real data) ---------- */
+  .status-grid{ display:grid; grid-auto-flow:column; grid-auto-columns:1fr; gap:3px; flex:0 0 auto; }
+  .status-sq{ aspect-ratio:1; background:rgba(76,99,119,0.18); }
+  .status-sq.online{ background:var(--teal); box-shadow:0 0 6px rgba(23,232,176,0.6); }
+  .status-sq.pending{ background:var(--amber); box-shadow:0 0 6px rgba(255,176,32,0.55); animation:blink 1.8s ease-in-out infinite; }
+  .status-sq.offline{ background:rgba(255,77,94,0.35); }
+  .status-grid span{ font-size:6.5px; letter-spacing:.5px; color:var(--text-dim); text-align:center; }
+
+  /* ---------- radar / price wheel (decorative) ---------- */
+  .radar-panel{ flex:1; display:flex; align-items:center; justify-content:center; min-height:0; }
+  .radar-wrap{ position:relative; width:480px; height:480px; flex-shrink:0; max-width:100%; }
+  .radar-hdr{ position:absolute; top:0; left:0; right:0; display:flex; justify-content:space-between; align-items:flex-start; }
+  .radar-hdr .ttl{ font-size:10px; letter-spacing:1.5px; color:var(--text-mid); }
+  .radar-hdr .ttl b{ color:var(--text-hi); font-size:12px; }
+  .radar-hdr .px{ text-align:right; }
+  .radar-hdr .px b{ font-family:'JetBrains Mono'; font-size:22px; color:var(--text-hi); text-shadow:0 0 12px rgba(47,230,255,0.3); }
+  .radar-hdr .px span{ font-family:'JetBrains Mono'; font-size:11px; color:var(--danger); display:block; margin-top:2px; }
+  .live-pill{
+    display:flex; align-items:center; gap:5px; font-size:8.5px; letter-spacing:1.5px; color:var(--danger);
+    border:1px solid rgba(255,77,94,0.4); padding:3px 8px; margin-left:auto; margin-bottom:4px; width:fit-content;
+  }
+  .live-pill i{width:5px; height:5px; border-radius:50%; background:var(--danger); box-shadow:0 0 8px 1px var(--danger); animation:blink 1.4s ease-in-out infinite;}
+  .radar-bezel{
+    position:absolute; top:50%; left:50%; width:436px; height:436px; transform:translate(-50%,-50%);
+    border-radius:50%;
+    background:conic-gradient(from 200deg, rgba(110,130,150,0.55), rgba(18,26,36,0.95) 28%, rgba(150,175,195,0.45) 52%, rgba(14,20,28,0.97) 78%, rgba(110,130,150,0.55));
+    box-shadow:0 0 26px rgba(0,0,0,0.6), 0 0 40px rgba(47,230,255,0.08);
+  }
+  .radar-bezel::before{
+    content:''; position:absolute; inset:16px; border-radius:50%; background:var(--void-deep);
+    box-shadow:inset 0 0 30px rgba(0,0,0,0.9);
+  }
+  .radar-ring{ position:absolute; top:50%; left:50%; border-radius:50%; transform:translate(-50%,-50%); }
+  .radar-ring.r1{ width:140px; height:140px; border:1px solid rgba(47,230,255,0.16); }
+  .radar-ring.r2{ width:270px; height:270px; border:1px dashed rgba(47,230,255,0.14); }
+  .radar-ring.r3{ width:400px; height:400px; border:1px solid rgba(47,230,255,0.24); }
+  .radar-sweep{ position:absolute; inset:4px; border-radius:50%; overflow:hidden; opacity:.55; }
+  .radar-sweep i{ position:absolute; inset:0; background:conic-gradient(from 0deg, rgba(47,230,255,0.22), transparent 18%, transparent 100%); animation:spin 6s linear infinite; }
+  .radar-spoke{ position:absolute; top:50%; left:50%; width:0; height:0; }
+  .radar-spoke i{ position:absolute; top:-199px; left:0; width:1px; height:199px; background:linear-gradient(rgba(47,230,255,0.14), transparent 75%); }
+  .price-node{ position:absolute; top:50%; left:50%; width:0; height:0; }
+  .price-node i{ position:absolute; left:0; border-radius:50%; background:var(--teal); box-shadow:0 0 6px 1px rgba(23,232,176,0.6); }
+  .price-node.now i{ background:var(--cyan); box-shadow:0 0 14px 3px rgba(47,230,255,0.85); animation:blink 1.6s ease-in-out infinite; }
+  .price-tag{
+    position:absolute; top:50%; left:50%; transform:translate(calc(-50% + 168px), calc(-50% + 146px));
+    background:var(--cyan); color:#031014; font-family:'JetBrains Mono'; font-weight:700; font-size:10px;
+    padding:2px 7px; white-space:nowrap;
+  }
+  .moon-beam{
+    position:absolute; top:50%; left:50%; width:339px; height:1px; transform-origin:0 0;
+    background:repeating-linear-gradient(90deg, rgba(230,244,251,0.6) 0 4px, transparent 4px 8px);
+  }
+  .moon-marker{ position:absolute; top:50%; left:50%; display:flex; flex-direction:column; align-items:center; gap:4px; width:80px; }
+  .moon-sphere{
+    width:30px; height:30px; border-radius:50%; flex-shrink:0;
+    background:
+      radial-gradient(circle at 35% 30%, rgba(255,255,255,0.9), transparent 35%),
+      radial-gradient(circle at 60% 55%, rgba(120,130,140,0.6), transparent 30%),
+      radial-gradient(circle at 25% 65%, rgba(90,100,112,0.6), transparent 25%),
+      radial-gradient(circle, #d8dee4, #8b96a3 70%, #5a6472 100%);
+    box-shadow:0 0 12px rgba(230,244,251,0.5), 0 0 26px rgba(230,244,251,0.25);
+  }
+  .moon-lbl{ font-size:8px; letter-spacing:1px; color:var(--text-mid); text-align:center; line-height:1.3; }
+  .moon-lbl b{ color:var(--text-hi); font-family:'JetBrains Mono'; font-weight:400; }
+
+  /* ---------- ranked bar list ---------- */
+  .bar-list{ display:flex; flex-direction:column; gap:5px; flex:1; justify-content:center; }
+  .bar-item{ display:flex; align-items:center; gap:8px; }
+  .bar-item .k{ width:58px; flex-shrink:0; font-size:8.5px; letter-spacing:.5px; color:var(--text-dim); }
+  .bar-item .track{ flex:1; height:6px; background:rgba(143,168,189,0.1); position:relative; }
+  .bar-item .fill{ position:absolute; top:0; left:0; bottom:0; background:var(--cyan); box-shadow:0 0 6px rgba(47,230,255,0.5); }
+  .bar-item .fill.teal{ background:var(--teal); box-shadow:0 0 6px rgba(23,232,176,0.5); }
+  .bar-item .n{ width:32px; text-align:right; flex-shrink:0; font-family:'JetBrains Mono'; font-size:9px; color:var(--text-mid); }
+
+  /* ---------- right strip: agents (live) + market watch (live widget) ---------- */
+  #agent-rows{ display:flex; flex-direction:column; gap:5px; overflow-y:auto; }
+  .agent-row{ display:flex; align-items:center; justify-content:space-between; padding:5px 8px; border:1px solid rgba(143,168,189,0.1); background:rgba(255,255,255,0.015); font-size:10px; }
+  .agent-row .name{ display:flex; align-items:center; gap:7px; }
+  .agent-row .led{width:6px; height:6px; border-radius:50%; background:var(--text-dim); flex-shrink:0;}
   .agent-row.online .led{background:var(--teal); box-shadow:0 0 6px 1px var(--teal);}
-  .agent-row .state{color:var(--text-dim); font-family:'JetBrains Mono'; font-size:10px;}
-  #market-widget-wrap{height:190px;}
-  #news-widget-wrap{flex:1; min-height:150px;}
+  .agent-row.pending .led{background:var(--amber); box-shadow:0 0 6px 1px var(--amber); animation:blink 1.6s ease-in-out infinite;}
+  .agent-row .state{font-family:'JetBrains Mono'; font-size:8px; letter-spacing:.5px; color:var(--text-dim);}
+  .agent-row.online .state{color:var(--teal);}
+  .agent-row.pending .state{color:var(--amber);}
 
-  #feed-col{
-    grid-area:feed;
-    border-top:1px solid rgba(47,230,255,0.12);
-    padding:10px 18px;
-    overflow-y:auto;
-    display:flex; flex-direction:column-reverse;
-  }
-  .feed-line{
-    font-family:'JetBrains Mono'; font-size:11px; color:var(--text-mid);
-    padding:3px 0; display:flex; gap:12px;
-  }
+  #market-widget-wrap{flex:1; min-height:0;}
+
+  /* ---------- feed / log ---------- */
+  #feed-col{ grid-area:feed; border-top:1px solid rgba(47,230,255,0.14); padding:8px 20px; overflow-y:auto; display:flex; flex-direction:column-reverse; gap:4px; }
+  .feed-line{ font-family:'JetBrains Mono'; font-size:10.5px; color:var(--text-mid); display:flex; gap:14px; padding:2px 0; }
   .feed-line .t{color:var(--text-dim);}
-  .feed-line .src{color:var(--cyan-dim);}
+  .feed-line .src{width:68px; flex-shrink:0; letter-spacing:1px;}
+  .feed-line.you .src{color:var(--text-dim);}
+  .feed-line.deepsea .src{color:var(--cyan);}
+  .feed-line.system .src{color:var(--amber);}
 
   ::-webkit-scrollbar{width:5px;}
   ::-webkit-scrollbar-thumb{background:rgba(47,230,255,0.2);}
@@ -235,210 +317,288 @@
 </head>
 <body>
 
+  <div id="grid-overlay"></div>
   <div id="dashboard">
 
-    <div id="sidebar">
-      <div class="side-item active">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12l9-9 9 9"/><path d="M5 10v10h14V10"/></svg>
-        <span>Dashboard</span>
-      </div>
-      <a class="side-item" href="/trading">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17l6-6 4 4 8-8"/><path d="M14 7h7v7"/></svg>
-        <span>Trading</span>
-      </a>
-      <div class="side-item">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="7" r="4"/><path d="M2 21v-2a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v2"/><circle cx="18" cy="8" r="3"/></svg>
-        <span>Agents</span>
-      </div>
-      <div class="side-item">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.6V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.6 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.6 1z"/></svg>
-        <span>Settings</span>
-      </div>
-      <div class="side-item">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
-        <span>Logs</span>
-      </div>
-      <div class="side-item">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a4 4 0 1 0-5.4 5.4l-6 6a1 1 0 0 0 1.4 1.4l6-6a4 4 0 0 0 5.4-5.4z"/></svg>
-        <span>Tools</span>
-      </div>
-      <div class="side-gap"></div>
-    </div>
-
     <div id="topbar">
-      <a class="brand" href="/" title="Back to Mission Control">
+      <div class="brand">
         <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2v13"/><path d="M6 5c0 3 2 5 6 5s6-2 6-5"/><path d="M6 5l1 5h10l1-5"/><path d="M9 22l3-4 3 4"/></svg>
-        <div class="brand-text">
-          <div class="name">DEEP<span>SEA</span></div>
-          <div class="tagline">TRADE · ANALYZE · EXECUTE</div>
+        <div class="brand-text">DEEP<span>SEA</span></div>
+        <div class="top-nav">
+          <div class="active" title="Dashboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12l9-9 9 9"/><path d="M5 10v10h14V10"/></svg></div>
+          <a href="/trading" title="Trading Room"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17l6-6 4 4 8-8"/><path d="M14 7h7v7"/></svg></a>
+          <div title="Agents"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="7" r="4"/><path d="M2 21v-2a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v2"/></svg></div>
+          <div title="Logs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></div>
         </div>
-      </a>
+      </div>
       <div class="status-cluster">
         <div class="status-chip" id="chip-mt5"><span class="led"></span>MT5 BRIDGE</div>
         <div class="status-chip" id="chip-gmail"><span class="led"></span>MERCURY GMAIL</div>
         <div class="status-chip warn"><span class="led"></span>AGENTS IDLE</div>
       </div>
       <div class="top-right">
+        <div id="mic-compact">
+          <button id="mic-btn" title="Talk to DeepSea">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+              <line x1="12" y1="19" x2="12" y2="23"/>
+              <line x1="8" y1="23" x2="16" y2="23"/>
+            </svg>
+          </button>
+          <div id="mic-status" class="mono">Starting mic...</div>
+        </div>
         <div id="clock" class="mono">--:--:--</div>
         <a href="/logout" id="logout-link">LOGOUT</a>
       </div>
     </div>
 
-    <div id="network-col">
-      <div id="orbit-wrap">
-        <div class="orbit-ring r1"></div>
-        <div class="orbit-ring r2"></div>
-        <div id="core-logo">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2v13"/><path d="M6 5c0 3 2 5 6 5s6-2 6-5"/><path d="M6 5l1 5h10l1-5"/><path d="M9 22l3-4 3 4"/></svg>
+    <div id="main">
+
+      <!-- ===== COLUMN A: AI core, gauges, risk ===== -->
+      <div class="col">
+        <div class="hud-frame" style="flex:0 0 260px; display:flex; flex-direction:column;">
+          <span class="br-tl"></span><span class="br-br"></span>
+          <div class="panel-title"><span class="led"></span>AI CORE · NEURAL LINK<span class="tick"></span></div>
+          <div class="globe-wrap">
+            <div class="globe-ticks">
+              <i style="transform:rotate(20deg); top:-88px; height:14px;"></i>
+              <i style="transform:rotate(70deg); top:-88px; height:10px;"></i>
+              <i style="transform:rotate(130deg); top:-88px; height:16px;"></i>
+              <i style="transform:rotate(200deg); top:-88px; height:11px;"></i>
+              <i style="transform:rotate(250deg); top:-88px; height:14px;"></i>
+              <i style="transform:rotate(310deg); top:-88px; height:9px;"></i>
+            </div>
+            <div class="dot-globe" style="width:160px; height:160px;"></div>
+            <svg class="globe-core" viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2v13"/><path d="M6 5c0 3 2 5 6 5s6-2 6-5"/><path d="M6 5l1 5h10l1-5"/><path d="M9 22l3-4 3 4"/></svg>
+            <div class="globe-readout" style="top:2px; left:2px;"><span class="lbl">SYNC</span><span class="val" id="stat-sync">--</span></div>
+            <div class="globe-readout" style="top:2px; right:2px; align-items:flex-end;"><span class="lbl">AGENTS</span><span class="val" id="stat-agents-count">--</span></div>
+            <div class="globe-readout" style="bottom:0; left:2px;"><span class="lbl">UPTIME</span><span class="val" id="stat-uptime">00:00:00</span></div>
+          </div>
         </div>
-        <div class="agent-node" style="transform:translate(calc(-50% + 0px), calc(-50% + -108px));">
-          <div class="bubble">🧠<span class="led" id="node-led-core"></span></div>
-          <div class="lbl">DeepSea<br>Core</div>
+
+        <div class="gauge-row">
+          <div class="hud-frame" style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+            <div class="gauge-dial">
+              <svg viewBox="0 0 100 100">
+                <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(47,230,255,0.15)" stroke-width="7"/>
+                <circle cx="50" cy="50" r="42" fill="none" stroke="var(--teal)" stroke-width="7" stroke-linecap="round" stroke-dasharray="263.9" stroke-dashoffset="68.6"/>
+              </svg>
+              <div class="val"><b>74%</b><span>CONFIDENCE</span></div>
+            </div>
+          </div>
+          <div class="hud-frame" style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+            <div class="gauge-dial">
+              <svg viewBox="0 0 100 100">
+                <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(47,230,255,0.15)" stroke-width="7"/>
+                <circle cx="50" cy="50" r="42" fill="none" stroke="var(--cyan)" stroke-width="7" stroke-linecap="round" stroke-dasharray="263.9" stroke-dashoffset="163.6"/>
+              </svg>
+              <div class="val"><b>38%</b><span>SYS LOAD</span></div>
+            </div>
+          </div>
         </div>
-        <div class="agent-node" style="transform:translate(calc(-50% + 94px), calc(-50% + -54px));">
-          <div class="bubble">✉️<span class="led" id="node-led-gmail"></span></div>
-          <div class="lbl">Mercury<br>Gmail</div>
-        </div>
-        <div class="agent-node" style="transform:translate(calc(-50% + 94px), calc(-50% + 54px));">
-          <div class="bubble">💬<span class="led" id="node-led-whatsapp"></span></div>
-          <div class="lbl">Venus<br>WhatsApp</div>
-        </div>
-        <div class="agent-node" style="transform:translate(calc(-50% + 0px), calc(-50% + 108px));">
-          <div class="bubble">📷<span class="led" id="node-led-instagram"></span></div>
-          <div class="lbl">Mars<br>Instagram</div>
-        </div>
-        <div class="agent-node" style="transform:translate(calc(-50% + -94px), calc(-50% + 54px));">
-          <div class="bubble">▶️<span class="led" id="node-led-youtube"></span></div>
-          <div class="lbl">Jupiter<br>YouTube</div>
-        </div>
-        <div class="agent-node" style="transform:translate(calc(-50% + -94px), calc(-50% + -54px));">
-          <div class="bubble">📊<span class="led" id="node-led-mt5"></span></div>
-          <div class="lbl">MT5<br>Bridge</div>
+
+        <div class="hud-frame amber" style="flex:1; display:flex; flex-direction:column;">
+          <span class="br-tl"></span><span class="br-br"></span>
+          <div class="panel-title warn"><span class="led"></span>RISK MANAGER<span class="tick"></span></div>
+          <div class="globe-wrap amber">
+            <div class="globe-ticks">
+              <i style="transform:rotate(40deg); top:-72px; height:11px;"></i>
+              <i style="transform:rotate(100deg); top:-72px; height:8px;"></i>
+              <i style="transform:rotate(160deg); top:-72px; height:13px;"></i>
+              <i style="transform:rotate(230deg); top:-72px; height:9px;"></i>
+              <i style="transform:rotate(300deg); top:-72px; height:12px;"></i>
+            </div>
+            <div class="dot-globe amber" style="width:126px; height:126px;"></div>
+            <div class="globe-readout" style="bottom:0; left:2px;"><span class="lbl">EXPOSURE</span><span class="val">MODERATE</span></div>
+            <div class="globe-readout" style="bottom:0; right:2px; align-items:flex-end;"><span class="lbl">DRAWDOWN</span><span class="val">-3.1%</span></div>
+          </div>
         </div>
       </div>
 
-      <div class="panel">
-        <div class="panel-title"><span class="led"></span>ACCOUNT</div>
-        <div class="stat-row"><span class="k">Balance</span><span class="v" id="stat-balance">--</span></div>
-        <div class="stat-row"><span class="k">Equity</span><span class="v" id="stat-equity">--</span></div>
-        <div class="stat-row"><span class="k">Open P/L</span><span class="v" id="stat-pl">--</span></div>
-        <div class="stat-row"><span class="k">Positions</span><span class="v" id="stat-positions">--</span></div>
-      </div>
-
-      <div class="panel" id="mic-panel">
-        <button id="mic-btn" title="Talk to DeepSea">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-            <line x1="12" y1="19" x2="12" y2="23"/>
-            <line x1="8" y1="23" x2="16" y2="23"/>
+      <!-- ===== COLUMN B: indicators + agent grid ===== -->
+      <div class="col">
+        <div class="hud-frame wave-panel" style="flex:0 0 108px;">
+          <span class="br-tl"></span><span class="br-br"></span>
+          <div class="panel-title"><span class="led"></span>RSI (14)<span class="tick"></span></div>
+          <div class="rd"><b>58.2</b><span>NEUTRAL</span></div>
+          <svg viewBox="0 0 380 70" preserveAspectRatio="none">
+            <line x1="0" y1="17" x2="380" y2="17" stroke="rgba(255,77,94,0.2)" stroke-dasharray="3 3"/>
+            <line x1="0" y1="53" x2="380" y2="53" stroke="rgba(23,232,176,0.2)" stroke-dasharray="3 3"/>
+            <polyline points="0,40 25,30 50,44 75,22 100,34 125,14 150,38 175,48 200,26 225,42 250,20 275,32 300,16 325,30 350,10 380,24" fill="none" stroke="var(--teal)" stroke-width="2"/>
           </svg>
-        </button>
-        <div id="mic-status">Starting mic...</div>
-      </div>
-    </div>
+        </div>
 
-    <div id="chart-col">
-      <div id="chart-widget-wrap">
-        <div class="tradingview-widget-container" style="height:100%;width:100%">
-          <div class="tradingview-widget-container__widget" style="height:100%;width:100%"></div>
-          <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js" async>
-          {
-            "autosize": true,
-            "symbol": "OANDA:XAUUSD",
-            "interval": "15",
-            "timezone": "Etc/UTC",
-            "theme": "dark",
-            "style": "1",
-            "locale": "en",
-            "toolbar_bg": "#0a1626",
-            "enable_publishing": false,
-            "hide_top_toolbar": false,
-            "hide_legend": false,
-            "allow_symbol_change": true,
-            "support_host": "https://www.tradingview.com"
-          }
-          </script>
+        <div class="hud-frame" style="flex:0 0 108px; display:flex; flex-direction:column;">
+          <span class="br-tl"></span><span class="br-br"></span>
+          <div class="panel-title"><span class="led"></span>WATCHLIST STRENGTH<span class="tick"></span></div>
+          <div class="bar-list">
+            <div class="bar-item"><span class="k">XAUUSD</span><div class="track"><div class="fill" style="width:82%"></div></div><span class="n">82%</span></div>
+            <div class="bar-item"><span class="k">BTCUSD</span><div class="track"><div class="fill teal" style="width:41%"></div></div><span class="n">41%</span></div>
+            <div class="bar-item"><span class="k">EURUSD</span><div class="track"><div class="fill teal" style="width:64%"></div></div><span class="n">64%</span></div>
+            <div class="bar-item"><span class="k">DXY</span><div class="track"><div class="fill" style="width:57%"></div></div><span class="n">57%</span></div>
+          </div>
+        </div>
+
+        <div class="hud-frame" style="flex:1; display:flex; flex-direction:column;">
+          <span class="br-tl"></span><span class="br-br"></span>
+          <div class="panel-title"><span class="led"></span>SIGNAL MATRIX · 5 TIMEFRAMES<span class="tick"></span></div>
+          <div class="signal-matrix">
+            <div class="signal-cell hi"></div><div class="signal-cell hi"></div><div class="signal-cell md"></div><div class="signal-cell hi"></div><div class="signal-cell off"></div><div class="signal-cell md"></div>
+            <div class="signal-cell md"></div><div class="signal-cell hi"></div><div class="signal-cell hi"></div><div class="signal-cell lo"></div><div class="signal-cell md"></div><div class="signal-cell hi"></div>
+            <div class="signal-cell hi"></div><div class="signal-cell md"></div><div class="signal-cell off"></div><div class="signal-cell hi"></div><div class="signal-cell hi"></div><div class="signal-cell md"></div>
+          </div>
+        </div>
+
+        <div class="hud-frame wave-panel" style="flex:0 0 108px;">
+          <span class="br-tl"></span><span class="br-br"></span>
+          <div class="panel-title"><span class="led"></span>VOLUME<span class="tick"></span></div>
+          <div class="rd"><b>3.2K</b><span>15M AVG 2.8K</span></div>
+          <svg viewBox="0 0 380 70" preserveAspectRatio="none">
+            <polyline points="0,60 25,44 50,54 75,30 100,48 125,20 150,40 175,54 200,26 225,44 250,34 275,16 300,40 325,28 350,50 380,32" fill="none" stroke="var(--cyan)" stroke-width="2"/>
+          </svg>
+        </div>
+
+        <div class="hud-frame" style="flex:0 0 auto;">
+          <span class="br-tl"></span><span class="br-br"></span>
+          <div class="panel-title"><span class="led"></span>AGENT STATUS<span class="tick"></span></div>
+          <div class="status-grid" id="status-grid-labels" style="margin-bottom:3px;"></div>
+          <div class="status-grid" id="status-grid-squares"></div>
         </div>
       </div>
-    </div>
 
-    <div id="right-col">
-      <div class="panel">
-        <div class="panel-title"><span class="led"></span>AGENTS</div>
-        <div id="agent-rows">
-          <div class="agent-row"><div class="name"><span class="led"></span>Loading agents…</div><div class="state">--</div></div>
+      <!-- ===== COLUMN C: account tiles, radar, agents/market strip ===== -->
+      <div class="col">
+        <div class="stat-tiles">
+          <div class="stat-tile"><div class="k">BALANCE</div><div class="v" id="stat-balance">--</div></div>
+          <div class="stat-tile"><div class="k">EQUITY</div><div class="v" id="stat-equity">--</div></div>
+          <div class="stat-tile"><div class="k">OPEN P/L</div><div class="v" id="stat-pl">--</div></div>
+          <div class="stat-tile"><div class="k">POSITIONS</div><div class="v" id="stat-positions">--</div></div>
         </div>
-      </div>
 
-      <div class="panel" style="flex-shrink:0;">
-        <div class="panel-title"><span class="led"></span>MARKET WATCH</div>
-        <div id="market-widget-wrap">
-          <div class="tradingview-widget-container" style="height:100%;width:100%">
-            <div class="tradingview-widget-container__widget" style="height:100%;width:100%"></div>
-            <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-market-overview.js" async>
-            {
-              "colorTheme": "dark",
-              "dateRange": "1D",
-              "showChart": false,
-              "locale": "en",
-              "width": "100%",
-              "height": "100%",
-              "isTransparent": true,
-              "showSymbolLogo": true,
-              "showFloatingTooltip": false,
-              "plotLineColorGrowing": "rgba(47,230,255,1)",
-              "plotLineColorFalling": "rgba(255,77,94,1)",
-              "tabs": [
-                {
-                  "title": "Watchlist",
-                  "symbols": [
-                    { "s": "OANDA:XAUUSD", "d": "Gold" },
-                    { "s": "COINBASE:BTCUSD", "d": "Bitcoin" },
-                    { "s": "FX:EURUSD", "d": "EUR/USD" },
-                    { "s": "FX:GBPUSD", "d": "GBP/USD" }
-                  ]
-                }
-              ]
-            }
-            </script>
+        <div style="flex:1; display:flex; gap:12px; min-height:0;">
+          <div class="hud-frame" style="flex:1; display:flex; flex-direction:column; min-width:0;">
+            <span class="br-tl"></span><span class="br-br"></span>
+            <div class="radar-hdr">
+              <div class="ttl">GOLD SPOT / U.S. DOLLAR · 15M<br><b>OANDA:XAUUSD</b></div>
+              <div class="px"><div class="live-pill"><i></i>LIVE</div><b>4,303.800</b><span>-3.605 (-0.08%)</span></div>
+            </div>
+            <div class="radar-panel">
+              <div class="radar-wrap">
+                <div class="radar-bezel"></div>
+                <div class="radar-sweep"><i></i></div>
+                <div class="radar-ring r1"></div>
+                <div class="radar-ring r2"></div>
+                <div class="radar-ring r3"></div>
+                <div class="radar-spoke" style="transform:rotate(0deg)"><i></i></div>
+                <div class="radar-spoke" style="transform:rotate(30deg)"><i></i></div>
+                <div class="radar-spoke" style="transform:rotate(60deg)"><i></i></div>
+                <div class="radar-spoke" style="transform:rotate(90deg)"><i></i></div>
+                <div class="radar-spoke" style="transform:rotate(120deg)"><i></i></div>
+                <div class="radar-spoke" style="transform:rotate(150deg)"><i></i></div>
+                <div class="radar-spoke" style="transform:rotate(180deg)"><i></i></div>
+                <div class="radar-spoke" style="transform:rotate(210deg)"><i></i></div>
+                <div class="radar-spoke" style="transform:rotate(240deg)"><i></i></div>
+                <div class="radar-spoke" style="transform:rotate(270deg)"><i></i></div>
+                <div class="radar-spoke" style="transform:rotate(300deg)"><i></i></div>
+                <div class="radar-spoke" style="transform:rotate(330deg)"><i></i></div>
+
+                <div class="price-node" style="transform:rotate(-150deg)"><i style="top:-68px; width:3px; height:3px; margin-left:-1.5px;"></i></div>
+                <div class="price-node" style="transform:rotate(-131deg)"><i style="top:-80px; width:3px; height:3px; margin-left:-1.5px;"></i></div>
+                <div class="price-node" style="transform:rotate(-112deg)"><i style="top:-74px; width:4px; height:4px; margin-left:-2px;"></i></div>
+                <div class="price-node" style="transform:rotate(-93deg)"><i style="top:-92px; width:4px; height:4px; margin-left:-2px;"></i></div>
+                <div class="price-node" style="transform:rotate(-75deg)"><i style="top:-86px; width:4px; height:4px; margin-left:-2px;"></i></div>
+                <div class="price-node" style="transform:rotate(-56deg)"><i style="top:-104px; width:5px; height:5px; margin-left:-2.5px;"></i></div>
+                <div class="price-node" style="transform:rotate(-37deg)"><i style="top:-95px; width:5px; height:5px; margin-left:-2.5px;"></i></div>
+                <div class="price-node" style="transform:rotate(-19deg)"><i style="top:-116px; width:5px; height:5px; margin-left:-2.5px;"></i></div>
+                <div class="price-node" style="transform:rotate(0deg)"><i style="top:-108px; width:6px; height:6px; margin-left:-3px;"></i></div>
+                <div class="price-node" style="transform:rotate(19deg)"><i style="top:-130px; width:6px; height:6px; margin-left:-3px;"></i></div>
+                <div class="price-node" style="transform:rotate(37deg)"><i style="top:-120px; width:6px; height:6px; margin-left:-3px;"></i></div>
+                <div class="price-node" style="transform:rotate(56deg)"><i style="top:-144px; width:7px; height:7px; margin-left:-3.5px;"></i></div>
+                <div class="price-node" style="transform:rotate(75deg)"><i style="top:-135px; width:7px; height:7px; margin-left:-3.5px;"></i></div>
+                <div class="price-node" style="transform:rotate(93deg)"><i style="top:-158px; width:8px; height:8px; margin-left:-4px;"></i></div>
+                <div class="price-node" style="transform:rotate(112deg)"><i style="top:-149px; width:8px; height:8px; margin-left:-4px;"></i></div>
+                <div class="price-node now" style="transform:rotate(131deg)"><i style="top:-199px; width:14px; height:14px; margin-left:-7px;"></i></div>
+                <div class="moon-beam" style="transform:translate(calc(-50% + -90px), calc(-50% + -110px)) rotate(45deg);"></div>
+                <div class="moon-marker" style="transform:translate(calc(-50% + -90px), calc(-50% + -110px));">
+                  <div class="moon-sphere"></div>
+                  <div class="moon-lbl">SUPPORT<br><b>4,290.00</b></div>
+                </div>
+
+                <div class="price-tag">4303.80</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="flex:0 0 250px; display:flex; flex-direction:column; gap:12px; min-height:0;">
+            <div class="hud-frame" style="flex:1.3; display:flex; flex-direction:column; overflow:hidden;">
+              <span class="br-tl"></span><span class="br-br"></span>
+              <div class="panel-title"><span class="led"></span>AGENTS<span class="tick"></span></div>
+              <div id="agent-rows">
+                <div class="agent-row"><div class="name"><span class="led"></span>Loading agents…</div><div class="state">--</div></div>
+              </div>
+            </div>
+
+            <div class="hud-frame" style="flex:1; display:flex; flex-direction:column;">
+              <span class="br-tl"></span><span class="br-br"></span>
+              <div class="panel-title"><span class="led"></span>MARKET WATCH<span class="tick"></span></div>
+              <div id="market-widget-wrap">
+                <div class="tradingview-widget-container" style="height:100%;width:100%">
+                  <div class="tradingview-widget-container__widget" style="height:100%;width:100%"></div>
+                  <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-market-overview.js" async>
+                  {
+                    "colorTheme": "dark",
+                    "dateRange": "1D",
+                    "showChart": false,
+                    "locale": "en",
+                    "width": "100%",
+                    "height": "100%",
+                    "isTransparent": true,
+                    "showSymbolLogo": true,
+                    "showFloatingTooltip": false,
+                    "plotLineColorGrowing": "rgba(47,230,255,1)",
+                    "plotLineColorFalling": "rgba(255,77,94,1)",
+                    "tabs": [
+                      {
+                        "title": "Watchlist",
+                        "symbols": [
+                          { "s": "OANDA:XAUUSD", "d": "Gold" },
+                          { "s": "COINBASE:BTCUSD", "d": "Bitcoin" },
+                          { "s": "FX:EURUSD", "d": "EUR/USD" },
+                          { "s": "FX:GBPUSD", "d": "GBP/USD" }
+                        ]
+                      }
+                    ]
+                  }
+                  </script>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      <div class="panel" style="flex:1; min-height:0; display:flex; flex-direction:column;">
-        <div class="panel-title"><span class="led"></span>LATEST NEWS</div>
-        <div id="news-widget-wrap">
-          <div class="tradingview-widget-container" style="height:100%;width:100%">
-            <div class="tradingview-widget-container__widget" style="height:100%;width:100%"></div>
-            <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-timeline.js" async>
-            {
-              "feedMode": "market",
-              "market": "forex",
-              "isTransparent": true,
-              "displayMode": "compact",
-              "width": "100%",
-              "height": "100%",
-              "colorTheme": "dark",
-              "locale": "en"
-            }
-            </script>
-          </div>
-        </div>
-      </div>
     </div>
 
     <div id="feed-col" class="mono">
-      <div class="feed-line"><span class="t">--:--:--</span><span class="src">SYSTEM</span><span>Dashboard shell initialized. Waiting for live feed connection.</span></div>
+      <div class="feed-line system"><span class="t">--:--:--</span><span class="src">SYSTEM</span><span>Dashboard shell initialized. Waiting for live feed connection.</span></div>
     </div>
 
   </div>
 
 <script>
+  const PAGE_LOAD_TIME = Date.now();
+
   function startClock(){
     const clock = document.getElementById('clock');
     function tick(){
       clock.textContent = new Date().toLocaleTimeString('en-GB', { hour12:false });
+      const secs = Math.floor((Date.now() - PAGE_LOAD_TIME) / 1000);
+      const h = String(Math.floor(secs / 3600)).padStart(2, '0');
+      const m = String(Math.floor((secs % 3600) / 60)).padStart(2, '0');
+      const s = String(secs % 60).padStart(2, '0');
+      const uptimeEl = document.getElementById('stat-uptime');
+      if (uptimeEl) uptimeEl.textContent = `${h}:${m}:${s}`;
     }
     tick();
     setInterval(tick, 1000);
@@ -447,7 +607,8 @@
   function logLine(src, msg){
     const feed = document.getElementById('feed-col');
     const line = document.createElement('div');
-    line.className = 'feed-line';
+    const cls = src === 'YOU' ? 'you' : (src === 'DEEPSEA' ? 'deepsea' : 'system');
+    line.className = 'feed-line ' + cls;
     const t = new Date().toLocaleTimeString('en-GB', { hour12:false });
     line.innerHTML = `<span class="t">${t}</span><span class="src">${src}</span><span>${msg}</span>`;
     feed.prepend(line);
@@ -472,24 +633,47 @@
   const lastAgentConnected = {};
   let lastGmailUnread = null;
 
+  function abbrev(agent){
+    return (agent.id || agent.name || '??').replace(/[^a-zA-Z]/g, '').slice(0, 2).toUpperCase() || '??';
+  }
+
   function renderAgentRows(agents){
     const container = document.getElementById('agent-rows');
     container.innerHTML = '';
+    const labelsEl = document.getElementById('status-grid-labels');
+    const squaresEl = document.getElementById('status-grid-squares');
+    labelsEl.innerHTML = '';
+    squaresEl.innerHTML = '';
+
     agents.forEach(agent => {
+      const pending = !agent.connected && agent.reason === 'not configured';
+      const state = agent.connected ? 'online' : (pending ? 'pending' : 'offline');
+      const label = agent.connected ? 'ON' : (pending ? 'PEND' : 'OFF');
+
       const row = document.createElement('div');
-      row.className = 'agent-row' + (agent.connected ? ' online' : '');
-      const label = agent.connected ? 'ONLINE' : (AGENT_REASON_LABEL[agent.reason] || 'OFFLINE');
+      row.className = 'agent-row ' + state;
       row.innerHTML = `<div class="name"><span class="led"></span>${agent.name}</div><div class="state">${label}</div>`;
       container.appendChild(row);
 
-      const nodeLed = document.getElementById('node-led-' + agent.id);
-      if (nodeLed) nodeLed.classList.toggle('online', agent.connected);
+      const lbl = document.createElement('span');
+      lbl.textContent = abbrev(agent);
+      labelsEl.appendChild(lbl);
+
+      const sq = document.createElement('div');
+      sq.className = 'status-sq ' + state;
+      squaresEl.appendChild(sq);
 
       if (lastAgentConnected[agent.id] !== undefined && lastAgentConnected[agent.id] !== agent.connected) {
         logLine('SYSTEM', `${agent.name} ${agent.connected ? 'connected.' : 'disconnected.'}`);
       }
       lastAgentConnected[agent.id] = agent.connected;
     });
+
+    const online = agents.filter(a => a.connected).length;
+    const syncEl = document.getElementById('stat-sync');
+    const countEl = document.getElementById('stat-agents-count');
+    if (syncEl) syncEl.textContent = agents.length ? Math.round((online / agents.length) * 100) + '%' : '--';
+    if (countEl) countEl.textContent = agents.length ? `${online}/${agents.length}` : '--';
   }
 
   async function pollStatus(){
@@ -523,13 +707,6 @@
 
   pollStatus();
   setInterval(pollStatus, 15000);
-
-  document.querySelectorAll('.side-item').forEach(item => {
-    item.addEventListener('click', () => {
-      document.querySelectorAll('.side-item').forEach(i => i.classList.remove('active'));
-      item.classList.add('active');
-    });
-  });
 
   const micBtn = document.getElementById('mic-btn');
   const micStatus = document.getElementById('mic-status');
@@ -780,7 +957,7 @@
     // always also log a clickable link so there's a guaranteed way to open
     // it even if the automatic tab didn't appear.
     window.open(match.url, '_blank');
-    logLine('DEEPSEA', `जी बॉस, मैं ${match.name} खोल रही हूँ। अगर नया टैब न खुले तो <a href="${match.url}" target="_blank" style="color:var(--accent, #35c7ff)">यहाँ क्लिक करें</a>।`);
+    logLine('DEEPSEA', `जी बॉस, मैं ${match.name} खोल रही हूँ। अगर नया टैब न खुले तो <a href="${match.url}" target="_blank" style="color:var(--cyan)">यहाँ क्लिक करें</a>।`);
     speak(`जी बॉस, मैं ${match.name} खोल रही हूँ।`);
     return true;
   }
@@ -848,7 +1025,7 @@
       const last = event.results[event.results.length - 1];
       if (!last.isFinal) return;
       const spokenText = last[0].transcript;
-      logLine('HEARD', spokenText);
+      logLine('SYSTEM', `Heard: ${spokenText}`);
 
       if (awaitingLaptopConfirm) {
         recognition.lang = 'en-IN';
