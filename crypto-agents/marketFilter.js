@@ -1,4 +1,4 @@
-const binance = require('./binanceClient');
+const futuresClient = require('./futuresClient');
 
 // Broad market regime filter: most altcoins move WITH Bitcoin most of the
 // time — a bullish volume surge on some altcoin means far less if BTC
@@ -18,7 +18,7 @@ function ema(values, period) {
 
 async function refreshBtcTrend() {
   try {
-    const klines = await binance.getKlines('BTCUSDT', '5m', 30);
+    const klines = await futuresClient.getKlines('BTCUSDT', '5m', 30);
     const closes = klines.map(k => parseFloat(k[4]));
     if (closes.length < 21) return cached;
     const ema9 = ema(closes.slice(-9), 9);

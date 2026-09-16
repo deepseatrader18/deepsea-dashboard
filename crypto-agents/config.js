@@ -15,6 +15,17 @@ const config = {
   BINANCE_API_KEY: process.env.BINANCE_API_KEY || '',
   BINANCE_API_SECRET: process.env.BINANCE_API_SECRET || '',
   BINANCE_BASE_URL: process.env.BINANCE_BASE_URL || 'https://api.binance.com',
+  FUTURES_BASE_URL: process.env.FUTURES_BASE_URL || 'https://fapi.binance.com',
+
+  // Trading now happens on Binance USDT-M Futures, not Spot — Spot can
+  // only ever sell what it already owns, so a genuine short (sell first,
+  // buy back later) requires Futures. Scanning for volume surges still
+  // uses Spot's WebSocket (broader coin coverage), but only symbols that
+  // also have a Futures perpetual are actually tradable; everything else
+  // is skipped. Kept deliberately low per the account owner's explicit
+  // choice — low leverage means the account's own stop-loss will always
+  // fire long before Binance's liquidation price would ever be reached.
+  FUTURES_LEVERAGE: num('FUTURES_LEVERAGE', 3),
 
   // Master switch. Even with keys configured, orders are only ever placed
   // when this is exactly "true" — anything else (unset, "false", typo)
