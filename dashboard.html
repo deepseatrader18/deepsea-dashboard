@@ -310,6 +310,7 @@
   .feed-line.you .src{color:var(--text-dim);}
   .feed-line.deepsea .src{color:var(--cyan);}
   .feed-line.system .src{color:var(--amber);}
+  .feed-line.volume .src{color:var(--teal);}
 
   ::-webkit-scrollbar{width:5px;}
   ::-webkit-scrollbar-thumb{background:rgba(47,230,255,0.2);}
@@ -607,7 +608,7 @@
   function logLine(src, msg){
     const feed = document.getElementById('feed-col');
     const line = document.createElement('div');
-    const cls = src === 'YOU' ? 'you' : (src === 'DEEPSEA' ? 'deepsea' : 'system');
+    const cls = src === 'YOU' ? 'you' : (src === 'DEEPSEA' ? 'deepsea' : (src === 'VOLUME' ? 'volume' : 'system'));
     line.className = 'feed-line ' + cls;
     const t = new Date().toLocaleTimeString('en-GB', { hour12:false });
     line.innerHTML = `<span class="t">${t}</span><span class="src">${src}</span><span>${msg}</span>`;
@@ -707,6 +708,21 @@
 
   pollStatus();
   setInterval(pollStatus, 15000);
+
+  let lastVolumeAlertTs = Date.now(); // skip historical backlog on first load
+  async function pollVolumeAlerts(){
+    try {
+      const res = await fetch(`/api/volume-alerts?since=${lastVolumeAlertTs}`);
+      const data = await res.json();
+      (data.alerts || []).forEach(a => {
+        lastVolumeAlertTs = Math.max(lastVolumeAlertTs, a.createdAt);
+        logLine('VOLUME', a.message);
+      });
+      if (typeof data.now === 'number') lastVolumeAlertTs = Math.max(lastVolumeAlertTs, data.now - 1);
+    } catch (err) { /* try again next cycle */ }
+  }
+  pollVolumeAlerts();
+  setInterval(pollVolumeAlerts, 30000);
 
   const micBtn = document.getElementById('mic-btn');
   const micStatus = document.getElementById('mic-status');
