@@ -780,8 +780,8 @@
     // always also log a clickable link so there's a guaranteed way to open
     // it even if the automatic tab didn't appear.
     window.open(match.url, '_blank');
-    logLine('DEEPSEA', `हाँ बॉस, मैं ${match.name} खोल रही हूँ। अगर नया टैब न खुले तो <a href="${match.url}" target="_blank" style="color:var(--accent, #35c7ff)">यहाँ क्लिक करें</a>।`);
-    speak(`हाँ बॉस, मैं ${match.name} खोल रही हूँ।`);
+    logLine('DEEPSEA', `जी बॉस, मैं ${match.name} खोल रही हूँ। अगर नया टैब न खुले तो <a href="${match.url}" target="_blank" style="color:var(--accent, #35c7ff)">यहाँ क्लिक करें</a>।`);
+    speak(`जी बॉस, मैं ${match.name} खोल रही हूँ।`);
     return true;
   }
 
