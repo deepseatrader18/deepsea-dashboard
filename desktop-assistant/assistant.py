@@ -213,6 +213,28 @@ def _resolve_scroll(text, lower):
     return None
 
 
+def _resolve_create_folder(text, lower):
+    # "desktop par deepsea naam se folder banao" / "ek folder banao trading naam ka"
+    match = re.search(
+        r'\bfolder\s+banao\b(?:\s+(.+?)\s+naam\s+(?:se|ka|ki))?'
+        r'|(.+?)\s+naam\s+(?:se|ka|ki)\s+(?:ek\s+)?folder\s+banao',
+        text, re.IGNORECASE,
+    )
+    if not match or 'folder' not in lower:
+        return None
+    name = (match.group(1) or match.group(2) or '').strip()
+    # Strip a leading "desktop par/pe" from the captured name if the name
+    # came before "folder banao", e.g. "desktop par deepsea naam se folder banao".
+    name = re.sub(r'^desktop\s*(par|pe|pr)\s*', '', name, flags=re.IGNORECASE).strip()
+    folder_name = name or 'New Folder'
+    path = os.path.join(os.path.expanduser('~'), 'Desktop', folder_name)
+
+    def action():
+        os.makedirs(path, exist_ok=True)
+
+    return f'Desktop par "{folder_name}" naam ka folder banana', action
+
+
 def _resolve_close_window(text, lower):
     # A generic "close the active window", not a fuzzy-matched kill of some
     # other named app — that's too easy to get wrong from a misheard name.
@@ -276,6 +298,7 @@ def _resolve_site(text, lower):
 COMMAND_RESOLVERS = [
     _resolve_shutdown,
     _resolve_restart,
+    _resolve_create_folder,
     _resolve_type,
     _resolve_click,
     _resolve_screenshot,
