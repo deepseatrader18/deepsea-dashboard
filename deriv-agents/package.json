@@ -1,0 +1,14 @@
+{
+  "name": "deepsea-deriv-agents",
+  "version": "1.0.0",
+  "private": true,
+  "description": "DeepSea Deriv Team — dollar-denominated multi-pair forex/gold multi-agent scalp-trading pipeline via Deriv's WebSocket API. Runs on the owner's own laptop, alongside crypto-agents/ and forex-agents/.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "ws": "^8.18.0"
+  }
+}
