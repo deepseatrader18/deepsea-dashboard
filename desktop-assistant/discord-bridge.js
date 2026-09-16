@@ -133,9 +133,15 @@ client.once('ready', () => {
   }
 });
 
+// Remembers the last channel a real command came in on, so the volume-alert
+// poller below (which has no incoming message to reply to) knows where to
+// proactively post.
+let lastChannel = null;
+
 client.on('messageCreate', async (msg) => {
   if (msg.author.bot) return;
   if (ALLOWED_DISCORD_USER_ID && msg.author.id !== ALLOWED_DISCORD_USER_ID) return;
+  lastChannel = msg.channel;
 
   const body = (msg.content || '').trim();
   const lower = body.toLowerCase();
@@ -250,5 +256,31 @@ client.on('messageCreate', async (msg) => {
 process.on('unhandledRejection', err => {
   console.error('Unhandled error in Discord bridge:', err);
 });
+
+// Binance volume-surge alerts (scanner runs server-side, see index.js) —
+// delivered the same proactive way as elsewhere, to whichever channel last
+// saw a real command.
+const VOLUME_ALERT_POLL_MS = 30000;
+let lastVolumeAlertTs = Date.now(); // skip historical backlog on startup
+
+async function checkForVolumeAlerts() {
+  if (!lastChannel) return;
+  try {
+    const res = await fetch(`${DASHBOARD_CHAT_URL}/api/bridge/volume-alerts?since=${lastVolumeAlertTs}`, {
+      headers: { 'x-bridge-token': BRIDGE_TOKEN },
+      signal: AbortSignal.timeout(10000)
+    });
+    const data = await res.json();
+    for (const alert of (data.alerts || [])) {
+      lastVolumeAlertTs = Math.max(lastVolumeAlertTs, alert.createdAt);
+      await lastChannel.send(`Boss, ${alert.message}`);
+    }
+    if (typeof data.now === 'number') lastVolumeAlertTs = Math.max(lastVolumeAlertTs, data.now - 1);
+  } catch (err) {
+    console.error('Volume-alert poll failed:', err.message);
+  }
+}
+
+setInterval(checkForVolumeAlerts, VOLUME_ALERT_POLL_MS);
 
 client.login(DISCORD_BOT_TOKEN);

@@ -527,6 +527,82 @@ app.get('/api/code-request/status', requireBridgeToken, (req, res) => {
   res.json({ ready: true, text: codeRequest.text, ok: codeRequest.ok, summary: codeRequest.summary });
 });
 
+// Binance volume scanner: alerts only, no auto-trading. Polls Binance's
+// public 24hr ticker for every USDT pair every couple of minutes and
+// flags a sudden jump in 24h quote volume — the kind of move that often
+// means a coin is starting to run. Deliberately alert-only for now: a
+// "buy where volume shows up" bot is a real-money momentum strategy
+// (vulnerable to pump-and-dump volume fakes), so live order placement
+// needs its own explicit risk-limit design before it's built, not bundled
+// in here.
+const BINANCE_TICKER_URL = 'https://api.binance.com/api/v3/ticker/24hr';
+const VOLUME_SCAN_INTERVAL_MS = 2 * 60 * 1000;
+const VOLUME_SURGE_PCT = 25; // % jump in 24h quote volume between scans to count as a surge
+const MIN_QUOTE_VOLUME_USDT = 2_000_000; // ignore illiquid pairs — too easy to fake their volume
+const ALERT_COOLDOWN_MS = 30 * 60 * 1000; // don't re-alert the same symbol too often while it stays elevated
+const VOLUME_ALERTS_MAX = 200;
+
+let binancePrevVolume = {}; // symbol -> last-seen 24h quoteVolume
+let lastVolumeAlertAt = {}; // symbol -> timestamp of last alert
+let volumeAlerts = []; // { id, symbol, message, createdAt }
+
+async function scanBinanceVolume() {
+  try {
+    const res = await fetch(BINANCE_TICKER_URL, { signal: AbortSignal.timeout(15000) });
+    if (!res.ok) throw new Error('status ' + res.status);
+    const tickers = await res.json();
+    const now = Date.now();
+
+    for (const t of tickers) {
+      if (!t.symbol || !t.symbol.endsWith('USDT')) continue;
+      const qv = parseFloat(t.quoteVolume);
+      if (!Number.isFinite(qv) || qv < MIN_QUOTE_VOLUME_USDT) continue;
+
+      const prev = binancePrevVolume[t.symbol];
+      binancePrevVolume[t.symbol] = qv;
+      if (prev === undefined || prev <= 0) continue; // no baseline yet on first sighting
+
+      const pctChange = ((qv - prev) / prev) * 100;
+      if (pctChange < VOLUME_SURGE_PCT) continue;
+
+      const lastAlert = lastVolumeAlertAt[t.symbol] || 0;
+      if (now - lastAlert < ALERT_COOLDOWN_MS) continue;
+      lastVolumeAlertAt[t.symbol] = now;
+
+      const priceChange = parseFloat(t.priceChangePercent);
+      const priceStr = Number.isFinite(priceChange) ? `${priceChange >= 0 ? '+' : ''}${priceChange}%` : '--';
+      volumeAlerts.push({
+        id: crypto.randomUUID(),
+        symbol: t.symbol,
+        createdAt: now,
+        message: `${t.symbol} mein volume achanak ~${Math.round(pctChange)}% badh gaya (24h volume ~$${Math.round(qv).toLocaleString('en-US')}), price ${priceStr}.`
+      });
+    }
+
+    if (volumeAlerts.length > VOLUME_ALERTS_MAX) {
+      volumeAlerts = volumeAlerts.slice(-VOLUME_ALERTS_MAX);
+    }
+  } catch (err) {
+    console.error('Binance volume scan failed:', err.message);
+  }
+}
+
+setInterval(scanBinanceVolume, VOLUME_SCAN_INTERVAL_MS);
+scanBinanceVolume();
+
+function getVolumeAlertsSince(sinceRaw) {
+  const since = parseInt(sinceRaw, 10) || 0;
+  return volumeAlerts.filter(a => a.createdAt > since);
+}
+
+app.get('/api/volume-alerts', requireAuth, (req, res) => {
+  res.json({ alerts: getVolumeAlertsSince(req.query.since), now: Date.now() });
+});
+
+app.get('/api/bridge/volume-alerts', requireBridgeToken, (req, res) => {
+  res.json({ alerts: getVolumeAlertsSince(req.query.since), now: Date.now() });
+});
+
 app.post('/api/chat', requireAuth, async (req, res) => {
   const userText = (req.body && req.body.text) || '';
   if (!userText.trim()) {

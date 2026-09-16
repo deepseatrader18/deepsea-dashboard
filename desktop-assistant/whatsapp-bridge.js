@@ -132,6 +132,32 @@ async function checkForCodeResult() {
 
 setInterval(checkForCodeResult, CODE_RESULT_POLL_MS);
 
+// Binance volume-surge alerts (scanner runs server-side, see index.js) —
+// delivered here the same proactive way as coding-agent results, to
+// whichever chat last sent a real command.
+const VOLUME_ALERT_POLL_MS = 30000;
+let lastVolumeAlertTs = Date.now(); // skip historical backlog on startup
+
+async function checkForVolumeAlerts() {
+  if (!lastChatId) return;
+  try {
+    const res = await fetch(`${DASHBOARD_CHAT_URL}/api/bridge/volume-alerts?since=${lastVolumeAlertTs}`, {
+      headers: { 'x-bridge-token': BRIDGE_TOKEN },
+      signal: AbortSignal.timeout(10000)
+    });
+    const data = await res.json();
+    for (const alert of (data.alerts || [])) {
+      lastVolumeAlertTs = Math.max(lastVolumeAlertTs, alert.createdAt);
+      await sendAndTrack(lastChatId, `Boss, ${alert.message}`);
+    }
+    if (typeof data.now === 'number') lastVolumeAlertTs = Math.max(lastVolumeAlertTs, data.now - 1);
+  } catch (err) {
+    console.error('Volume-alert poll failed:', err.message);
+  }
+}
+
+setInterval(checkForVolumeAlerts, VOLUME_ALERT_POLL_MS);
+
 const BRIDGE_TOKEN = process.env.WHATSAPP_BRIDGE_TOKEN;
 const DASHBOARD_CHAT_URL = process.env.DASHBOARD_CHAT_URL || 'https://deepsea-dashboard.onrender.com';
 const ALLOWED_CHAT_ID = process.env.ALLOWED_WHATSAPP_CHAT_ID || null;
