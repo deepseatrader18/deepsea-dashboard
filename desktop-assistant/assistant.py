@@ -2,6 +2,8 @@ import ctypes
 import json
 import os
 import re
+import subprocess
+import sys
 import threading
 import time
 import urllib.error
@@ -587,6 +589,50 @@ def clap_listener():
         print(f'-> Clap listener disabled: {exc}')
 
 
+SELF_UPDATE_CHECK_SECONDS = 600
+_PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_ASSISTANT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+def _git(args):
+    return subprocess.run(
+        ['git'] + args, cwd=_PROJECT_DIR, capture_output=True, text=True, check=True,
+    ).stdout.strip()
+
+
+def self_update_loop():
+    """Checks GitHub every few minutes for new commits and, if this pulls in
+    changes under desktop-assistant/, installs them and restarts itself —
+    so a code push (including from the automated coding-agent pipeline)
+    reaches this laptop without anyone running git pull / pip install by
+    hand. Any other repo change (dashboard, etc.) is still pulled to keep
+    the local checkout in sync, just without a restart."""
+    while True:
+        time.sleep(SELF_UPDATE_CHECK_SECONDS)
+        try:
+            before = _git(['rev-parse', 'HEAD'])
+            _git(['fetch', 'origin', 'main'])
+            remote = _git(['rev-parse', 'origin/main'])
+            if before == remote:
+                continue
+
+            changed = _git(['diff', '--name-only', before, remote])
+            _git(['merge', 'origin/main'])
+
+            if 'desktop-assistant/' not in changed:
+                print('-> Pulled a repo update (no changes for this script).')
+                continue
+
+            print('-> New assistant update found — installing and restarting...')
+            subprocess.run(
+                [sys.executable, '-m', 'pip', 'install', '-r', 'requirements.txt', '--quiet'],
+                cwd=_ASSISTANT_DIR, check=True,
+            )
+            os.execv(sys.executable, [sys.executable] + sys.argv)
+        except Exception as exc:
+            print(f'-> Self-update check failed (will retry in {SELF_UPDATE_CHECK_SECONDS // 60} min): {exc}')
+
+
 def main():
     recognizer = sr.Recognizer()
     mic = sr.Microphone()
@@ -595,6 +641,8 @@ def main():
     with mic as source:
         recognizer.adjust_for_ambient_noise(source, duration=1)
     print('Ready. Say "DeepSea" to wake it up, then speak a command.')
+
+    threading.Thread(target=self_update_loop, daemon=True).start()
 
     if CLAP_ENABLED:
         threading.Thread(target=clap_listener, daemon=True).start()

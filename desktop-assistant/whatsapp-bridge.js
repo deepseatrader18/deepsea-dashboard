@@ -1,6 +1,53 @@
 require('dotenv').config();
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
+const { execSync, spawn } = require('child_process');
+const path = require('path');
+
+// Checks GitHub every few minutes for new commits and, if this pulls in
+// changes under desktop-assistant/, installs them and restarts itself — so
+// a code push (including from the automated coding-agent pipeline) reaches
+// this laptop without anyone running git pull / npm install by hand. Any
+// other repo change (dashboard, etc.) is still pulled to keep the local
+// checkout in sync, just without a restart.
+const PROJECT_DIR = path.join(__dirname, '..');
+const SELF_UPDATE_CHECK_MS = 10 * 60 * 1000;
+
+function git(args) {
+  return execSync(`git ${args}`, { cwd: PROJECT_DIR, encoding: 'utf8' }).trim();
+}
+
+function checkForSelfUpdate() {
+  try {
+    const before = git('rev-parse HEAD');
+    git('fetch origin main');
+    const remote = git('rev-parse origin/main');
+    if (before === remote) return;
+
+    const changed = git(`diff --name-only ${before} ${remote}`);
+    git('merge origin/main');
+
+    if (!changed.includes('desktop-assistant/')) {
+      console.log('-> Pulled a repo update (no changes for this bridge).');
+      return;
+    }
+
+    console.log('-> New bridge update found — installing and restarting...');
+    execSync('npm install --no-fund --no-audit', { cwd: __dirname, stdio: 'inherit' });
+
+    const child = spawn(process.argv[0], [process.argv[1]], {
+      cwd: __dirname,
+      detached: true,
+      stdio: 'inherit'
+    });
+    child.unref();
+    process.exit(0);
+  } catch (err) {
+    console.error('Self-update check failed (will retry next cycle):', err.message);
+  }
+}
+
+setInterval(checkForSelfUpdate, SELF_UPDATE_CHECK_MS);
 
 const BRIDGE_TOKEN = process.env.WHATSAPP_BRIDGE_TOKEN;
 const DASHBOARD_CHAT_URL = process.env.DASHBOARD_CHAT_URL || 'https://deepsea-dashboard.onrender.com';
