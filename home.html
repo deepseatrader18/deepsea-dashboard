@@ -140,7 +140,12 @@
   .planet.violet:hover .orb{box-shadow:0 0 30px 4px rgba(139,123,255,.3); border-color:var(--violet);}
 
   #planet-trading{ transform:translate(calc(-50% - 190px), calc(-50% - 90px)); }
-  #planet-assistant{ transform:translate(calc(-50% + 190px), calc(-50% + 90px)); }
+  #planet-crypto{ transform:translate(calc(-50% + 190px), calc(-50% - 90px)); }
+  #planet-assistant{ transform:translate(calc(-50% - 0px), calc(-50% + 150px)); }
+
+  .planet.amber .orb{border-color:rgba(255,182,72,.5);}
+  .planet.amber .orb svg{color:#ffb648;}
+  .planet.amber:hover .orb{box-shadow:0 0 30px 4px rgba(255,182,72,.3); border-color:#ffb648;}
 
   @media (max-width:720px){
     #stage{height:auto;}
@@ -185,7 +190,8 @@
         </linearGradient>
       </defs>
       <path class="bridge-path" d="M 50 50 Q 32 34, 20 28" vector-effect="non-scaling-stroke"/>
-      <path class="bridge-path" d="M 50 50 Q 68 66, 80 72" vector-effect="non-scaling-stroke"/>
+      <path class="bridge-path" d="M 50 50 Q 68 34, 80 28" vector-effect="non-scaling-stroke"/>
+      <path class="bridge-path" d="M 50 50 Q 50 66, 50 82" vector-effect="non-scaling-stroke"/>
     </svg>
 
     <div class="orbit-ring r1"></div>
@@ -205,6 +211,14 @@
       </div>
       <div class="name">TRADING ROOM</div>
       <div class="sub">Chart · Risk · Signals</div>
+    </a>
+
+    <a href="/crypto" class="planet amber" id="planet-crypto">
+      <div class="orb">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 2.5-1.5c1.4 0 2.5.8 2.5 2s-1.1 1.8-2.5 2c-1.4.2-2.5.8-2.5 2s1.1 2 2.5 2a2.5 2.5 0 0 0 2.5-1.5"/><path d="M12 6.5v11"/></svg>
+      </div>
+      <div class="name">CRYPTO TRADING ROOM</div>
+      <div class="sub">Binance · Team · Scalp Trades</div>
     </a>
 
     <a href="/assistant" class="planet violet" id="planet-assistant">

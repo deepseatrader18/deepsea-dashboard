@@ -5,3 +5,4 @@ __pycache__/
 desktop-assistant/.env
 desktop-assistant/.wwebjs_auth/
 desktop-assistant/.wwebjs_cache/
+crypto-agents/data/

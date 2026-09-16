@@ -8,6 +8,7 @@ const { getTechnicalAnalysis } = require('./trading/technical');
 const { runTradingPipeline } = require('./trading/pipeline');
 const { sendTelegramAlert, formatTradeAlert } = require('./trading/telegramAlert');
 const { recordTrade, checkOpenTrades, getTradeLog } = require('./trading/tradeJournal');
+const cryptoTeamStore = require('./trading/cryptoTeamStore');
 const { MsEdgeTTS, OUTPUT_FORMAT } = require('msedge-tts');
 const app = express();
 
@@ -130,6 +131,10 @@ app.get('/trading', requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, 'trading.html'));
 });
 
+app.get('/crypto', requireAuth, (req, res) => {
+  res.sendFile(path.join(__dirname, 'crypto.html'));
+});
+
 app.get('/api/test-telegram', requireAuth, async (req, res) => {
   if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
     return res.status(400).json({ ok: false, reason: 'TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not configured on the server' });
@@ -168,6 +173,40 @@ app.post('/api/speak', requireAuth, async (req, res) => {
 app.get('/api/trades', requireAuth, async (req, res) => {
   const log = await getTradeLog(ENV);
   res.json(log);
+});
+
+// Crypto Team status/trades — pushed here by crypto-agents/ (running on
+// the owner's own VPS, since Binance blocks Render's US datacenter IP).
+// Render never talks to Binance directly or drives any trading decision;
+// this is display-only, the same shared-secret bridge pattern already
+// used by the WhatsApp/laptop bridges and the code-request mailbox above.
+app.post('/api/bridge/crypto-status', requireBridgeToken, async (req, res) => {
+  await cryptoTeamStore.saveStatus(ENV, { ...(req.body || {}), receivedAt: Date.now() });
+  res.json({ ok: true });
+});
+
+app.post('/api/bridge/crypto-trade', requireBridgeToken, async (req, res) => {
+  await cryptoTeamStore.addTrade(ENV, req.body || {});
+  res.json({ ok: true });
+});
+
+app.get('/api/crypto/status', requireAuth, async (req, res) => {
+  const status = await cryptoTeamStore.getStatus(ENV);
+  res.json(status || { available: false });
+});
+
+app.get('/api/crypto/trades', requireAuth, async (req, res) => {
+  const trades = await cryptoTeamStore.loadTrades(ENV);
+  trades.sort((a, b) => (b.closedAt || b.openedAt || 0) - (a.closedAt || a.openedAt || 0));
+  res.json({
+    trades,
+    summary: {
+      total: trades.length,
+      targetHit: trades.filter(t => t.outcome === 'target_hit').length,
+      stoppedOut: trades.filter(t => t.outcome === 'stopped_out').length,
+      realizedPnl: trades.reduce((sum, t) => sum + (typeof t.pnlQuote === 'number' ? t.pnlQuote : 0), 0)
+    }
+  });
 });
 
 app.get('/api/status', requireAuth, async (req, res) => {

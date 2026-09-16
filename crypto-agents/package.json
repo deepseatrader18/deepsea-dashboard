@@ -1,0 +1,13 @@
+{
+  "name": "deepsea-crypto-agents",
+  "version": "1.0.0",
+  "private": true,
+  "description": "DeepSea Crypto Team — continuous Binance volume scanner + multi-agent scalp-trading pipeline. Runs on the owner's own VPS/laptop, not on Render.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5"
+  }
+}
