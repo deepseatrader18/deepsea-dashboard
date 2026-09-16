@@ -35,6 +35,13 @@ services:
         sync: false
       - key: TRADING_AGENTS_SERVICE_TOKEN
         sync: false
+      # Shared secret with crypto-agents/ (runs on the owner's own VPS, not
+      # on Render — Binance blocks Render's US IP). Independent of
+      # WHATSAPP_BRIDGE_TOKEN on purpose. Only used to display live status
+      # on the /crypto page; trading itself and Telegram alerts don't go
+      # through Render at all.
+      - key: CRYPTO_BRIDGE_TOKEN
+        sync: false
 
   # Runs the TradingAgents multi-agent LLM pipeline (github.com/TauricResearch/TradingAgents)
   # as a background job and exposes its live per-agent progress, so the Trading

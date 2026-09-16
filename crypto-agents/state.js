@@ -12,6 +12,8 @@ function defaultState() {
     dayKey: null,
     dayStartBalance: null,
     realizedPnlToday: 0,
+    totalRealizedPnl: 0, // all-time, across days — the number that actually answers "did paper trading work?"
+    paperBalance: null, // simulated equity, only used when not reading a real Binance balance
     openPositions: {}, // symbol -> { qty, entryPrice, tpPrice, slPrice, ocoOrderListId, openedAt }
     cooldowns: {}, // symbol -> timestamp until which re-entry is blocked
     trades: [] // closed trade history, most recent last
@@ -50,4 +52,15 @@ function rolloverDayIfNeeded(state, currentBalance) {
   return state;
 }
 
-module.exports = { load, save, rolloverDayIfNeeded, defaultState };
+// Paper equity carried forward across restarts and days (unlike
+// dayStartBalance, which resets every day for the loss-cap check) — this
+// is what lets a multi-day paper run show real compounding results
+// instead of resetting to the same starting number every morning.
+function ensurePaperBalance(state) {
+  if (state.paperBalance === null || state.paperBalance === undefined) {
+    state.paperBalance = config.PAPER_STARTING_BALANCE;
+  }
+  return state.paperBalance;
+}
+
+module.exports = { load, save, rolloverDayIfNeeded, defaultState, ensurePaperBalance };

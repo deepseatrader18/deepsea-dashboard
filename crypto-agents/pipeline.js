@@ -1,4 +1,3 @@
-const config = require('./config');
 const binance = require('./binanceClient');
 const { momentumResearch, volumeResearch } = require('./team/researchers');
 const { discuss } = require('./team/discussion');
@@ -6,28 +5,32 @@ const { sizePosition, checkExposure } = require('./team/portfolio');
 const generalManager = require('./team/generalManager');
 const executor = require('./executor');
 const riskGuard = require('./riskGuard');
+const balanceCache = require('./balanceCache');
 
 // Runs one volume-surging coin through the full team: Research -> Discussion
 // -> Portfolio Management -> General Manager -> Executor. Returns a full
 // trace of every agent's output so the dashboard can show real reasoning,
 // not a canned animation, mirroring the existing trading-agents-service
 // job trace shape.
+//
+// Speed matters here — a volume surge is a fast-moving signal, and every
+// millisecond between detection and the order landing is slippage risk.
+// The only network calls in this whole path are one klines fetch and (in
+// live mode) the order placement itself in executor.js — balance comes
+// from the in-memory cache (balanceCache.js), not a fresh signed request,
+// and every research/discussion/sizing step is synchronous in-process math.
 async function runForSymbol(surge, state) {
   const cooldownCheck = riskGuard.checkSymbolCooldown(state, surge.symbol);
   if (!cooldownCheck.ok) {
     return { symbol: surge.symbol, decision: { action: 'hold', reasoning: cooldownCheck.reason } };
   }
 
-  const klines = await binance.getKlines(surge.symbol, '1m', 60);
+  const klines = await binance.getKlines(surge.symbol, '1m', 30);
   const researchA = momentumResearch(klines);
   const researchB = volumeResearch(klines);
   const discussion = discuss({ researchA, researchB, surge, klines });
 
-  const filters = binance.getSymbolFilters(surge.symbol);
-  const quoteAsset = filters ? filters.quoteAsset : config.QUOTE_ASSET;
-  const freeBalance = config.LIVE_TRADING_ENABLED && config.BINANCE_API_KEY
-    ? await binance.getFreeBalance(quoteAsset).catch(() => 0)
-    : (state.dayStartBalance || 1000); // paper-mode assumed balance for sizing math
+  const freeBalance = await balanceCache.getFreeBalance(state);
 
   const positionSizing = discussion.proceed
     ? sizePosition(surge.symbol, surge.lastPrice, freeBalance)
@@ -45,6 +48,9 @@ async function runForSymbol(surge, state) {
 
   const executed = await executor.executePlan(decision);
   riskGuard.recordOpen(state, surge.symbol, executed);
+  if (executed.mode === 'live') {
+    balanceCache.adjustLiveBalance(-(executed.qty * executed.entryPrice));
+  }
   trace.executed = executed;
   return trace;
 }

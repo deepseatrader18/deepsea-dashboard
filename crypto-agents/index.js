@@ -1,10 +1,13 @@
 const config = require('./config');
 const binance = require('./binanceClient');
 const scanner = require('./scanner');
+const WsScanner = require('./wsScanner');
 const pipeline = require('./pipeline');
 const monitor = require('./monitor');
 const riskGuard = require('./riskGuard');
 const reporter = require('./reporter');
+const telegram = require('./telegram');
+const balanceCache = require('./balanceCache');
 const stateStore = require('./state');
 
 // The Crypto Team's main loop — meant to run on the owner's own VPS/laptop,
@@ -12,42 +15,65 @@ const stateStore = require('./state');
 // which is why this whole folder is separate from the Render-hosted
 // dashboard). See README.md for setup.
 //
-// Every tick: scan all <QUOTE_ASSET> pairs on Binance for a real volume
-// surge -> run the strongest candidate through the full team (Research ->
-// Discussion -> Portfolio Management -> General Manager) -> execute (or
-// paper-log) the approved plan -> check existing open positions for their
-// exit -> report a status snapshot to the dashboard.
+// Architecture is event-driven, not polled, because speed was an explicit
+// requirement: a volume surge is a fast-moving signal, and every second
+// spent waiting for the next poll is a second of slippage risk.
+//   - wsScanner.js holds a live Binance WebSocket connection and emits a
+//     'surge' event within ~1s of a real volume jump — handleSurge() below
+//     reacts immediately, no polling delay.
+//   - A separate fast interval (POSITION_TICK_MS) only handles bookkeeping:
+//     checking open positions for their exit and reporting status. The
+//     actual take-profit/stop-loss already lives on Binance's own matching
+//     engine as an OCO order and fires the instant price crosses it,
+//     completely independent of this interval's speed.
 
 let state = stateStore.load();
 const recentDecisions = []; // last few full team traces, for the dashboard
+const recentSurges = []; // last few raw surge detections, even ones skipped (cooldown/max-trades) — shows the scanner is actually finding things
+const processing = new Set(); // symbols currently mid-pipeline, to avoid double-firing on a burst of WS ticks
 
 function pushRecentDecision(trace) {
   recentDecisions.unshift({ ...trace, at: Date.now() });
   if (recentDecisions.length > 8) recentDecisions.pop();
 }
 
-async function tick() {
-  const allTickers = await binance.getAllTickers24hr().catch(err => {
-    console.error('Ticker fetch failed:', err.message);
-    return [];
-  });
+function pushRecentSurge(surge) {
+  recentSurges.unshift({ symbol: surge.symbol, surgeMultiple: surge.surgeMultiple, priceChangePct: surge.priceChangePct, at: Date.now() });
+  if (recentSurges.length > 10) recentSurges.pop();
+}
 
-  const latestPrices = {};
-  for (const t of allTickers) latestPrices[t.symbol] = parseFloat(t.lastPrice);
+async function handleSurge(surge) {
+  pushRecentSurge(surge);
+  if (processing.has(surge.symbol)) return; // already being evaluated from an earlier tick this same burst
+  const openCount = Object.keys(state.openPositions).length;
+  if (openCount >= config.MAX_CONCURRENT_TRADES) return;
+  if (!riskGuard.checkSymbolCooldown(state, surge.symbol).ok) return;
 
-  const surges = await scanner.scanOnce(allTickers).catch(err => {
-    console.error('Scan failed:', err.message);
-    return [];
-  });
-
-  let freeBalance = 0;
+  processing.add(surge.symbol);
   try {
-    freeBalance = config.BINANCE_API_KEY
-      ? await binance.getFreeBalance(config.QUOTE_ASSET)
-      : (state.dayStartBalance || 1000);
+    const trace = await pipeline.runForSymbol(surge, state);
+    pushRecentDecision(trace);
+    if (trace.decision.action === 'buy') {
+      console.log(`ENTERED ${trace.symbol} (${trace.executed.mode}): ${trace.decision.reasoning}`);
+      telegram.sendTelegramMessage(telegram.formatTradeOpen(trace.executed));
+    }
+    stateStore.save(state);
+  } catch (err) {
+    console.error(`Pipeline failed for ${surge.symbol}:`, err.message);
+  } finally {
+    processing.delete(surge.symbol);
+  }
+}
+
+async function housekeepingTick(wsScanner) {
+  const latestPrices = wsScanner.getLatestPrices();
+
+  let freeBalance;
+  try {
+    freeBalance = await balanceCache.getFreeBalance(state);
   } catch (err) {
     console.error('Balance check failed:', err.message);
-    freeBalance = state.dayStartBalance || 0;
+    freeBalance = stateStore.ensurePaperBalance(state);
   }
   stateStore.rolloverDayIfNeeded(state, freeBalance);
 
@@ -55,26 +81,10 @@ async function tick() {
   for (const trade of closedTrades) {
     console.log(`Closed ${trade.symbol}: ${trade.outcome} pnl=${trade.pnlQuote.toFixed(2)} ${config.QUOTE_ASSET}`);
     reporter.reportTrade(trade);
+    telegram.sendTelegramMessage(telegram.formatTradeClose(trade));
   }
 
-  const openCount = Object.keys(state.openPositions).length;
-  const slotsFree = config.MAX_CONCURRENT_TRADES - openCount;
-
-  const candidates = surges.filter(s => riskGuard.checkSymbolCooldown(state, s.symbol).ok).slice(0, Math.max(slotsFree, 0));
-
-  for (const surge of candidates) {
-    try {
-      const trace = await pipeline.runForSymbol(surge, state);
-      pushRecentDecision(trace);
-      if (trace.decision.action === 'buy') {
-        console.log(`ENTERED ${trace.symbol} (${trace.executed.mode}): ${trace.decision.reasoning}`);
-      }
-    } catch (err) {
-      console.error(`Pipeline failed for ${surge.symbol}:`, err.message);
-    }
-  }
-
-  stateStore.save(state);
+  if (closedTrades.length) stateStore.save(state);
 
   reporter.reportStatus({
     live: config.LIVE_TRADING_ENABLED,
@@ -82,28 +92,71 @@ async function tick() {
     freeBalance,
     dayStartBalance: state.dayStartBalance,
     realizedPnlToday: state.realizedPnlToday,
+    totalRealizedPnl: state.totalRealizedPnl || 0,
+    paperStartingBalance: config.PAPER_STARTING_BALANCE,
     openPositions: state.openPositions,
-    scannedCount: allTickers.length,
-    topSurges: surges.slice(0, 5).map(s => ({ symbol: s.symbol, surgeMultiple: s.surgeMultiple, priceChangePct: s.priceChangePct })),
+    wsConnected: wsScanner.connected,
+    scannedCount: Object.keys(wsScanner.getLatestPrices()).length,
+    recentSurges,
     recentDecisions,
     updatedAt: Date.now()
   });
 }
 
+// REST fallback loop — only runs when WS_SCANNER_ENABLED=false. Slower
+// (one poll per SCAN_INTERVAL_MS across the whole exchange) but useful if
+// a network/firewall blocks outbound WebSocket connections on a given VPS.
+const restLatestPrices = {};
+async function restScanTick() {
+  const allTickers = await binance.getAllTickers24hr().catch(err => {
+    console.error('Ticker fetch failed:', err.message);
+    return [];
+  });
+  for (const t of allTickers) restLatestPrices[t.symbol] = parseFloat(t.lastPrice);
+  const surges = await scanner.scanOnce(allTickers).catch(err => {
+    console.error('Scan failed:', err.message);
+    return [];
+  });
+  const openCount = Object.keys(state.openPositions).length;
+  const slotsFree = config.MAX_CONCURRENT_TRADES - openCount;
+  const candidates = surges.filter(s => riskGuard.checkSymbolCooldown(state, s.symbol).ok).slice(0, Math.max(slotsFree, 0));
+  for (const surge of candidates) await handleSurge(surge);
+}
+
 async function main() {
   console.log('DeepSea Crypto Team starting...');
-  console.log(`Mode: ${config.LIVE_TRADING_ENABLED ? 'LIVE (real orders will be placed)' : 'PAPER (no real orders — set LIVE_TRADING_ENABLED=true to go live)'}`);
+  if (config.LIVE_TRADING_ENABLED) {
+    console.log('Mode: LIVE — real orders will be placed on Binance with real money.');
+  } else {
+    console.log(`Mode: PAPER TRADING — no real orders will be placed. Simulated balance: ${config.PAPER_STARTING_BALANCE} ${config.QUOTE_ASSET}.`);
+    console.log('Run this for a while, check /crypto on the dashboard (or the trade log below) for win rate and P/L, then set LIVE_TRADING_ENABLED=true once you are happy with the results.');
+  }
 
   await binance.syncServerTime();
   await binance.loadExchangeInfo();
-  console.log('Exchange info loaded. Scanning every', config.SCAN_INTERVAL_MS / 1000, 'seconds.');
 
   // Refresh exchangeInfo periodically — symbols get added/delisted and
   // filters occasionally change; stale filters would round orders wrong.
   setInterval(() => binance.loadExchangeInfo().catch(err => console.error('exchangeInfo refresh failed:', err.message)), 6 * 60 * 60 * 1000);
 
-  await tick().catch(err => console.error('Tick failed:', err.message));
-  setInterval(() => tick().catch(err => console.error('Tick failed:', err.message)), config.SCAN_INTERVAL_MS);
+  // Correct the in-memory live balance for fee drift periodically — never
+  // on the hot trading path itself (see balanceCache.js).
+  if (config.LIVE_TRADING_ENABLED && config.BINANCE_API_KEY) {
+    setInterval(() => balanceCache.resyncLiveBalance().catch(err => console.error('Balance resync failed:', err.message)), config.BALANCE_RESYNC_MS);
+  }
+
+  if (config.WS_SCANNER_ENABLED) {
+    console.log('Starting WebSocket scanner (real-time, all Binance pairs)...');
+    const wsScanner = new WsScanner();
+    wsScanner.on('surge', (surge) => { handleSurge(surge); });
+    setInterval(() => housekeepingTick(wsScanner).catch(err => console.error('Housekeeping tick failed:', err.message)), config.POSITION_TICK_MS);
+  } else {
+    console.log('WS_SCANNER_ENABLED=false — falling back to slower REST polling every', config.SCAN_INTERVAL_MS / 1000, 'seconds.');
+    const fakeWsScanner = { getLatestPrices: () => restLatestPrices, connected: false };
+    setInterval(() => housekeepingTick(fakeWsScanner).catch(err => console.error('Housekeeping tick failed:', err.message)), config.POSITION_TICK_MS);
+    await restScanTick().catch(err => console.error('Scan tick failed:', err.message));
+    setInterval(() => restScanTick().catch(err => console.error('Scan tick failed:', err.message)), config.SCAN_INTERVAL_MS);
+  }
 }
 
 main().catch(err => {

@@ -38,6 +38,10 @@ const REDIS_URL = process.env.REDIS_URL;
 const TRADING_AGENTS_SERVICE_URL = process.env.TRADING_AGENTS_SERVICE_URL;
 const TRADING_AGENTS_SERVICE_TOKEN = process.env.TRADING_AGENTS_SERVICE_TOKEN;
 const WHATSAPP_BRIDGE_TOKEN = process.env.WHATSAPP_BRIDGE_TOKEN;
+// Separate from WHATSAPP_BRIDGE_TOKEN on purpose — the Crypto Team bridge
+// (crypto-agents/, running on the owner's own VPS) has nothing to do with
+// WhatsApp, so it gets its own shared secret instead of reusing that one.
+const CRYPTO_BRIDGE_TOKEN = process.env.CRYPTO_BRIDGE_TOKEN;
 
 const ENV = {
   VPS_STATUS_URL, VPS_STATUS_KEY, GMAIL_USER, GMAIL_APP_PASSWORD,
@@ -178,14 +182,22 @@ app.get('/api/trades', requireAuth, async (req, res) => {
 // Crypto Team status/trades — pushed here by crypto-agents/ (running on
 // the owner's own VPS, since Binance blocks Render's US datacenter IP).
 // Render never talks to Binance directly or drives any trading decision;
-// this is display-only, the same shared-secret bridge pattern already
-// used by the WhatsApp/laptop bridges and the code-request mailbox above.
-app.post('/api/bridge/crypto-status', requireBridgeToken, async (req, res) => {
+// this is display-only. Trade alerts themselves go straight to Telegram
+// from crypto-agents/, not through here — this bridge is only for the
+// /crypto dashboard page, and uses its own CRYPTO_BRIDGE_TOKEN, unrelated
+// to the WhatsApp bridge's token.
+function requireCryptoBridgeToken(req, res, next) {
+  if (!CRYPTO_BRIDGE_TOKEN) return res.status(500).json({ error: 'CRYPTO_BRIDGE_TOKEN not set on server' });
+  if (req.get('x-bridge-token') !== CRYPTO_BRIDGE_TOKEN) return res.status(401).json({ error: 'unauthorized' });
+  next();
+}
+
+app.post('/api/bridge/crypto-status', requireCryptoBridgeToken, async (req, res) => {
   await cryptoTeamStore.saveStatus(ENV, { ...(req.body || {}), receivedAt: Date.now() });
   res.json({ ok: true });
 });
 
-app.post('/api/bridge/crypto-trade', requireBridgeToken, async (req, res) => {
+app.post('/api/bridge/crypto-trade', requireCryptoBridgeToken, async (req, res) => {
   await cryptoTeamStore.addTrade(ENV, req.body || {});
   res.json({ ok: true });
 });

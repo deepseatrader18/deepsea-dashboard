@@ -25,6 +25,13 @@ const config = {
 
   QUOTE_ASSET: process.env.QUOTE_ASSET || 'USDT',
 
+  // Simulated starting capital used whenever the team isn't reading a real
+  // Binance balance (paper mode, or no API key configured yet) — set this
+  // to whatever amount you actually plan to trade with once live, so the
+  // paper results (win rate, P/L) mean something for that real capital
+  // size instead of an arbitrary number.
+  PAPER_STARTING_BALANCE: num('PAPER_STARTING_BALANCE', 1000),
+
   // --- Position sizing & scalp targets (conservative defaults) ---
   PER_TRADE_RISK_PCT: num('PER_TRADE_RISK_PCT', 1), // % of free quote balance risked per trade
   TAKE_PROFIT_PCT: num('TAKE_PROFIT_PCT', 0.6), // quick scalp target
@@ -34,15 +41,44 @@ const config = {
   SYMBOL_COOLDOWN_MIN: num('SYMBOL_COOLDOWN_MIN', 15), // don't re-enter the same coin too soon
 
   // --- Volume scanner ---
+  // Scanning itself is WebSocket-driven (wsScanner.js), not polled — Binance
+  // pushes a full-market ticker update roughly once a second, so a surge is
+  // seen within about a second of it happening instead of waiting for a
+  // REST poll interval. SCAN_INTERVAL_MS only matters if WS_SCANNER_ENABLED
+  // is turned off and the slower REST fallback (scanner.js) is used instead.
+  WS_SCANNER_ENABLED: process.env.WS_SCANNER_ENABLED !== 'false',
   SCAN_INTERVAL_MS: num('SCAN_INTERVAL_MS', 20_000),
-  VOLUME_HISTORY_LEN: num('VOLUME_HISTORY_LEN', 10),
+  // Rolling window length is in "ticks" — ~1s apart on the WS stream, so
+  // 30 is roughly a 30-second baseline instead of scanner.js's old ~10x20s.
+  VOLUME_HISTORY_LEN: num('VOLUME_HISTORY_LEN', 30),
   VOLUME_SURGE_MULTIPLIER: num('VOLUME_SURGE_MULTIPLIER', 3),
   MIN_QUOTE_VOLUME_24H: num('MIN_QUOTE_VOLUME_24H', 2_000_000), // ignore illiquid coins
-  MIN_DELTA_QUOTE_VOLUME: num('MIN_DELTA_QUOTE_VOLUME', 50_000),
+  MIN_DELTA_QUOTE_VOLUME: num('MIN_DELTA_QUOTE_VOLUME', 10_000), // smaller per-second deltas than the old 20s polling window
 
-  // --- Reporting back to the Render dashboard (display only) ---
+  // How often open positions are checked for their exit and a status
+  // snapshot is sent to the dashboard. This is just bookkeeping speed, not
+  // trading speed — the actual take-profit/stop-loss order already sits on
+  // Binance's own matching engine (via OCO) and fires instantly regardless
+  // of this interval.
+  POSITION_TICK_MS: num('POSITION_TICK_MS', 3_000),
+  // How often a live account balance is re-synced from Binance to correct
+  // for fee drift — the trading decision path itself uses an in-memory
+  // balance updated instantly after every trade, never waiting on this.
+  BALANCE_RESYNC_MS: num('BALANCE_RESYNC_MS', 2 * 60_000),
+
+  // --- Telegram trade alerts (sent directly from here, not via Render) ---
+  // Every BUY, every target-hit, every stopped-out gets its own message —
+  // no WhatsApp, no other channel. Use the same bot/chat you may already
+  // have set up for the forex alerts on the Render dashboard, or a
+  // separate one — either works, this just needs its own copy of the
+  // values since this process runs independently on your VPS.
+  TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || '',
+  TELEGRAM_CHAT_ID: process.env.TELEGRAM_CHAT_ID || '',
+
+  // --- Reporting status/trades to the Render dashboard's Crypto Trading
+  //     Room page (display only, optional, independent of Telegram) ---
   DASHBOARD_URL: process.env.DASHBOARD_URL || 'https://deepsea-dashboard.onrender.com',
-  BRIDGE_TOKEN: process.env.WHATSAPP_BRIDGE_TOKEN || process.env.CRYPTO_BRIDGE_TOKEN || '',
+  BRIDGE_TOKEN: process.env.CRYPTO_BRIDGE_TOKEN || '',
   REPORT_INTERVAL_MS: num('REPORT_INTERVAL_MS', 15_000),
 
   STATE_FILE: process.env.STATE_FILE || require('path').join(__dirname, 'data', 'state.json')

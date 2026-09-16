@@ -47,6 +47,12 @@ function recordOpen(state, symbol, position) {
 function recordClose(state, symbol, closedTrade) {
   delete state.openPositions[symbol];
   state.realizedPnlToday += closedTrade.pnlQuote;
+  state.totalRealizedPnl = (state.totalRealizedPnl || 0) + closedTrade.pnlQuote;
+  // Live trades' balance always comes straight from Binance, so there's
+  // nothing to carry forward here — only paper equity needs its own ledger.
+  if (closedTrade.mode !== 'live') {
+    state.paperBalance = (state.paperBalance ?? config.PAPER_STARTING_BALANCE) + closedTrade.pnlQuote;
+  }
   state.trades.push(closedTrade);
   if (state.trades.length > 500) state.trades = state.trades.slice(-500);
   setSymbolCooldown(state, symbol);

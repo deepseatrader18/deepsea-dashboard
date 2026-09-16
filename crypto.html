@@ -145,20 +145,21 @@
 
   <div class="row row1">
     <div class="panel">
-      <div class="panel-head"><div class="panel-title"><span class="dot" style="background:var(--accent)"></span>Scanner</div></div>
+      <div class="panel-head"><div class="panel-title"><span class="dot" id="wsDot" style="background:var(--accent)"></span>Scanner (WebSocket)</div></div>
       <div class="stat-big mono" id="scannedCount">—</div>
-      <div class="stat-list"><div class="stat-row"><span class="k">Pairs scanned this tick</span></div></div>
+      <div class="stat-list"><div class="stat-row"><span class="k">Pairs tracked live</span><span class="v" id="wsStatusText">—</span></div></div>
     </div>
     <div class="panel">
       <div class="panel-head"><div class="panel-title"><span class="dot" style="background:var(--amber)"></span>Balance</div></div>
       <div class="stat-big mono" id="balanceBig">—</div>
       <div class="stat-list">
         <div class="stat-row"><span class="k">Today's P/L</span><span class="v mono" id="pnlToday">—</span></div>
+        <div class="stat-row"><span class="k">Total P/L (all-time)</span><span class="v mono" id="pnlTotal">—</span></div>
         <div class="stat-row"><span class="k">Open positions</span><span class="v mono" id="openCount">—</span></div>
       </div>
     </div>
     <div class="panel" style="grid-column:span 2;">
-      <div class="panel-head"><div class="panel-title"><span class="dot" style="background:var(--bull)"></span>Top Volume Surges (this tick)</div></div>
+      <div class="panel-head"><div class="panel-title"><span class="dot" style="background:var(--bull)"></span>Recent Volume Surges</div></div>
       <div class="surge-list" id="surgeList">Waiting for data…</div>
     </div>
   </div>
@@ -198,7 +199,7 @@
     </div>
   </div>
 
-  <footer>Yeh page sirf status dikhata hai — sabhi decisions aur trades <b>crypto-agents/</b> service se aate hain jo owner ke apne VPS par chalti hai (Binance access ke liye), Render is loop mein kabhi order nahi bhejta. Har trade real hai jab team "LIVE" mode mein ho — chhota profit target, tight stop-loss, aur conservative position sizing ke saath. Not a guarantee, not financial advice.<br><b>DeepSea Crypto Trading Room</b></footer>
+  <footer>Yeh page sirf status dikhata hai — sabhi decisions aur trades <b>crypto-agents/</b> service se aate hain jo owner ke apne VPS par chalti hai (Binance access ke liye), Render is loop mein kabhi order nahi bhejta. Scanning real-time WebSocket se hoti hai aur har trade alert seedha Telegram par jaata hai. Har trade real hai jab team "LIVE" mode mein ho — chhota profit target, tight stop-loss, aur conservative position sizing ke saath. Not a guarantee, not financial advice.<br><b>DeepSea Crypto Trading Room</b></footer>
 
 </div>
 
@@ -252,7 +253,7 @@
 
   function renderSurges(surges){
     const wrap = document.getElementById('surgeList');
-    if (!surges || !surges.length) { wrap.textContent = 'No volume surge detected in the last scan.'; return; }
+    if (!surges || !surges.length) { wrap.textContent = 'No volume surge detected yet.'; return; }
     wrap.innerHTML = '';
     surges.forEach(s => {
       const row = document.createElement('div');
@@ -291,12 +292,18 @@
       pill.innerHTML = `<span class="dot"></span>${data.live ? 'LIVE' : 'PAPER'}`;
 
       document.getElementById('scannedCount').textContent = data.scannedCount != null ? data.scannedCount : '—';
+      document.getElementById('wsStatusText').textContent = data.wsConnected ? 'WS connected' : (data.wsConnected === false ? 'WS disconnected' : '—');
+      const wsDot = document.getElementById('wsDot');
+      if (wsDot) wsDot.style.background = data.wsConnected ? 'var(--bull)' : 'var(--bear)';
       document.getElementById('balanceBig').textContent = fmtUsd(data.freeBalance) + ' ' + (data.quoteAsset || '');
       const pnl = document.getElementById('pnlToday');
       pnl.textContent = fmtUsd(data.realizedPnlToday);
       pnl.className = 'v mono ' + (data.realizedPnlToday > 0 ? 'pos' : data.realizedPnlToday < 0 ? 'neg' : '');
+      const pnlTotal = document.getElementById('pnlTotal');
+      pnlTotal.textContent = fmtUsd(data.totalRealizedPnl);
+      pnlTotal.className = 'v mono ' + (data.totalRealizedPnl > 0 ? 'pos' : data.totalRealizedPnl < 0 ? 'neg' : '');
 
-      renderSurges(data.topSurges);
+      renderSurges(data.recentSurges);
       renderPositions(data.openPositions);
 
       if (data.recentDecisions && data.recentDecisions.length) {

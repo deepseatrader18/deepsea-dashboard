@@ -1,5 +1,6 @@
 const binance = require('./binanceClient');
 const riskGuard = require('./riskGuard');
+const balanceCache = require('./balanceCache');
 
 // Watches every open position for its exit (take-profit or stop-loss) and
 // records the closed trade with realized P/L, which is what feeds the
@@ -46,6 +47,9 @@ async function checkOpenPositions(state, latestPrices) {
       if (closed) {
         const closedTrade = { ...pos, ...closed };
         riskGuard.recordClose(state, symbol, closedTrade);
+        if (closedTrade.mode === 'live') {
+          balanceCache.adjustLiveBalance(closedTrade.exitPrice * closedTrade.qty);
+        }
         closedTrades.push(closedTrade);
       }
     } catch (err) {
