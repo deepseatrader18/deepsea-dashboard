@@ -63,4 +63,15 @@ function ensurePaperBalance(state) {
   return state.paperBalance;
 }
 
-module.exports = { load, save, rolloverDayIfNeeded, defaultState, ensurePaperBalance };
+// Reserves/returns capital against the paper balance the instant a
+// position opens/closes — without this, with no cap on concurrent trades,
+// every new trade would size itself off the *full* starting balance
+// regardless of how much is already tied up in other open paper
+// positions, wildly overstating how much capital is actually free.
+function adjustPaperBalance(state, delta) {
+  ensurePaperBalance(state);
+  state.paperBalance += delta;
+  return state.paperBalance;
+}
+
+module.exports = { load, save, rolloverDayIfNeeded, defaultState, ensurePaperBalance, adjustPaperBalance };

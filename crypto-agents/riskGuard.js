@@ -6,7 +6,13 @@ const config = require('./config');
 // it would break the account's own risk policy.
 function checkGlobalLimits(state, currentBalance) {
   const openCount = Object.keys(state.openPositions).length;
-  if (openCount >= config.MAX_CONCURRENT_TRADES) {
+  // MAX_CONCURRENT_TRADES <= 0 means "no cap" — trade on every coin that
+  // clears the team's own bar, however many that turns out to be. Capital
+  // itself still self-limits this: as more positions open, free balance
+  // shrinks (see pipeline.js/state.js paper-balance reservation), so
+  // Position Sizer eventually starts rejecting trades once free balance
+  // drops below the exchange's minimum order size.
+  if (config.MAX_CONCURRENT_TRADES > 0 && openCount >= config.MAX_CONCURRENT_TRADES) {
     return { ok: false, reason: `Max concurrent trades reached (${openCount}/${config.MAX_CONCURRENT_TRADES})` };
   }
 
@@ -50,8 +56,12 @@ function recordClose(state, symbol, closedTrade) {
   state.totalRealizedPnl = (state.totalRealizedPnl || 0) + closedTrade.pnlQuote;
   // Live trades' balance always comes straight from Binance, so there's
   // nothing to carry forward here — only paper equity needs its own ledger.
+  // The full exit value (not just the P/L) is returned, since the entry
+  // amount was reserved out of paperBalance the moment the trade opened
+  // (see pipeline.js) — returning only pnlQuote here would double-count
+  // the capital as still "spent" forever.
   if (closedTrade.mode !== 'live') {
-    state.paperBalance = (state.paperBalance ?? config.PAPER_STARTING_BALANCE) + closedTrade.pnlQuote;
+    state.paperBalance = (state.paperBalance ?? config.PAPER_STARTING_BALANCE) + closedTrade.qty * closedTrade.exitPrice;
   }
   state.trades.push(closedTrade);
   if (state.trades.length > 500) state.trades = state.trades.slice(-500);

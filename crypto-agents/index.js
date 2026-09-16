@@ -46,7 +46,7 @@ async function handleSurge(surge) {
   pushRecentSurge(surge);
   if (processing.has(surge.symbol)) return; // already being evaluated from an earlier tick this same burst
   const openCount = Object.keys(state.openPositions).length;
-  if (openCount >= config.MAX_CONCURRENT_TRADES) return;
+  if (config.MAX_CONCURRENT_TRADES > 0 && openCount >= config.MAX_CONCURRENT_TRADES) return;
   if (!riskGuard.checkSymbolCooldown(state, surge.symbol).ok) return;
 
   processing.add(surge.symbol);
@@ -118,7 +118,7 @@ async function restScanTick() {
     return [];
   });
   const openCount = Object.keys(state.openPositions).length;
-  const slotsFree = config.MAX_CONCURRENT_TRADES - openCount;
+  const slotsFree = config.MAX_CONCURRENT_TRADES > 0 ? config.MAX_CONCURRENT_TRADES - openCount : Infinity;
   const candidates = surges.filter(s => riskGuard.checkSymbolCooldown(state, s.symbol).ok).slice(0, Math.max(slotsFree, 0));
   for (const surge of candidates) await handleSurge(surge);
 }

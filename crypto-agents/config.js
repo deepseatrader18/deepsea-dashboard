@@ -36,6 +36,12 @@ const config = {
   PER_TRADE_RISK_PCT: num('PER_TRADE_RISK_PCT', 1), // % of free quote balance risked per trade
   TAKE_PROFIT_PCT: num('TAKE_PROFIT_PCT', 0.6), // quick scalp target
   STOP_LOSS_PCT: num('STOP_LOSS_PCT', 0.35), // tight stop, kept smaller than TP
+  // 0 (or any non-positive value) means no cap — trade every coin that
+  // clears the team's bar, however many that is. Capital still
+  // self-limits this in practice: free balance shrinks as positions open
+  // (see state.js's paper-balance reservation / balanceCache.js for live),
+  // so Position Sizer starts rejecting new trades once free balance drops
+  // below the exchange's minimum order size.
   MAX_CONCURRENT_TRADES: num('MAX_CONCURRENT_TRADES', 2),
   DAILY_LOSS_CAP_PCT: num('DAILY_LOSS_CAP_PCT', 3), // halts new entries for the day once hit
   SYMBOL_COOLDOWN_MIN: num('SYMBOL_COOLDOWN_MIN', 15), // don't re-enter the same coin too soon

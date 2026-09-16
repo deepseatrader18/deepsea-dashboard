@@ -6,6 +6,7 @@ const generalManager = require('./team/generalManager');
 const executor = require('./executor');
 const riskGuard = require('./riskGuard');
 const balanceCache = require('./balanceCache');
+const stateStore = require('./state');
 
 // Runs one volume-surging coin through the full team: Research -> Discussion
 // -> Portfolio Management -> General Manager -> Executor. Returns a full
@@ -50,6 +51,8 @@ async function runForSymbol(surge, state) {
   riskGuard.recordOpen(state, surge.symbol, executed);
   if (executed.mode === 'live') {
     balanceCache.adjustLiveBalance(-(executed.qty * executed.entryPrice));
+  } else {
+    stateStore.adjustPaperBalance(state, -(executed.qty * executed.entryPrice));
   }
   trace.executed = executed;
   return trace;
