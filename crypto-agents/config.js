@@ -45,11 +45,11 @@ const config = {
 
   // --- Position sizing & scalp targets (conservative defaults) ---
   PER_TRADE_RISK_PCT: num('PER_TRADE_RISK_PCT', 1), // % of free quote balance risked per trade
-  // Widened slightly from the original 0.6/0.35 after real paper-trading
-  // showed the stop was tight enough to catch normal post-spike noise, not
-  // just genuine reversals — same ~1.7:1 reward:risk ratio, more room.
-  TAKE_PROFIT_PCT: num('TAKE_PROFIT_PCT', 0.8), // quick scalp target
-  STOP_LOSS_PCT: num('STOP_LOSS_PCT', 0.5), // tight stop, kept smaller than TP
+  // Risk:reward fixed at 1:3 per the account owner's explicit choice —
+  // target is exactly 3x the stop distance, so even a sub-50% win rate can
+  // still be net profitable (3 wins cover 1 loss's worth of risk).
+  STOP_LOSS_PCT: num('STOP_LOSS_PCT', 0.5), // tight stop
+  TAKE_PROFIT_PCT: num('TAKE_PROFIT_PCT', 1.5), // 3x STOP_LOSS_PCT (1:3 risk:reward)
   // After a surge is detected, wait this long and re-check price before
   // actually entering — buying the instant a surge is seen means buying
   // the exact top of the spike, right before the pullback that was
