@@ -56,8 +56,19 @@ const config = {
   // so Position Sizer starts rejecting new trades once free balance drops
   // below the exchange's minimum order size.
   MAX_CONCURRENT_TRADES: num('MAX_CONCURRENT_TRADES', 2),
+  // Hard ceiling on how much capital can be tied up across ALL open
+  // positions at once, as a % of the day's starting balance — this is
+  // what actually keeps the account safe when MAX_CONCURRENT_TRADES is
+  // uncapped: trade on as many coins as clear the bar, but never let more
+  // than this fraction of the account be at risk at the same moment.
+  MAX_TOTAL_EXPOSURE_PCT: num('MAX_TOTAL_EXPOSURE_PCT', 25),
   DAILY_LOSS_CAP_PCT: num('DAILY_LOSS_CAP_PCT', 3), // halts new entries for the day once hit
   SYMBOL_COOLDOWN_MIN: num('SYMBOL_COOLDOWN_MIN', 15), // don't re-enter the same coin too soon
+  // If live price gaps down past the stop-loss trigger by more than this
+  // without the OCO's stop leg actually filling (a fast/illiquid drop can
+  // jump straight through a stop-limit order), monitor.js force-closes the
+  // position with an emergency market sell instead of leaving it exposed.
+  GAP_PROTECTION_BUFFER_PCT: num('GAP_PROTECTION_BUFFER_PCT', 1),
 
   // --- Volume scanner ---
   // Scanning itself is WebSocket-driven (wsScanner.js), not polled — Binance

@@ -78,10 +78,15 @@ async function housekeepingTick(wsScanner) {
   stateStore.rolloverDayIfNeeded(state, freeBalance);
 
   const closedTrades = await monitor.checkOpenPositions(state, latestPrices);
-  for (const trade of closedTrades) {
-    console.log(`Closed ${trade.symbol}: ${trade.outcome} pnl=${trade.pnlQuote.toFixed(2)} ${config.QUOTE_ASSET}`);
-    reporter.reportTrade(trade);
-    telegram.sendTelegramMessage(telegram.formatTradeClose(trade));
+  if (closedTrades.length) {
+    // Read once after all of this tick's closes are recorded, so every
+    // message reports the account state as of right now, not mid-update.
+    const totalCapital = await balanceCache.getFreeBalance(state).catch(() => null);
+    for (const trade of closedTrades) {
+      console.log(`Closed ${trade.symbol}: ${trade.outcome} pnl=${trade.pnlQuote.toFixed(2)} ${config.QUOTE_ASSET}`);
+      reporter.reportTrade(trade);
+      telegram.sendTelegramMessage(telegram.formatTradeClose(trade, { totalCapital, totalProfit: state.totalRealizedPnl }));
+    }
   }
 
   if (closedTrades.length) stateStore.save(state);

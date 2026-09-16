@@ -35,15 +35,22 @@ function formatTradeOpen(trade) {
   );
 }
 
-function formatTradeClose(trade) {
+// totalCapital/totalProfit are account-wide numbers as of right after this
+// trade closed (current balance, and all-time realized P/L) — shown on
+// every close so a running picture doesn't require checking the dashboard
+// separately.
+function formatTradeClose(trade, { totalCapital, totalProfit } = {}) {
   const won = trade.outcome === 'target_hit';
   const icon = won ? '✅' : '🛑';
   const modeTag = trade.mode === 'live' ? 'LIVE' : 'PAPER';
   const pnlSign = trade.pnlQuote >= 0 ? '+' : '';
+  const totalProfitSign = typeof totalProfit === 'number' && totalProfit >= 0 ? '+' : '';
   return (
     `${icon} [${modeTag}] <b>${escapeHtml(trade.symbol)}</b> — ${won ? 'TARGET HIT' : 'STOPPED OUT'}\n\n` +
     `Exit: ${trade.exitPrice}\n` +
-    `P/L: ${pnlSign}${trade.pnlQuote.toFixed(2)}`
+    `This trade P/L: ${pnlSign}${trade.pnlQuote.toFixed(2)}\n\n` +
+    `Total capital: ${typeof totalCapital === 'number' ? totalCapital.toFixed(2) : 'n/a'}\n` +
+    `Total profit (all-time): ${typeof totalProfit === 'number' ? `${totalProfitSign}${totalProfit.toFixed(2)}` : 'n/a'}`
   );
 }
 

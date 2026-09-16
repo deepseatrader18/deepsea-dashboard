@@ -126,6 +126,26 @@ async function placeMarketBuy(symbol, quoteOrderQty) {
   });
 }
 
+// Emergency exit used only when a price gap has jumped straight through
+// the OCO's stop-limit leg without filling it (see monitor.js) — a market
+// order guarantees the position actually closes, at whatever price is
+// available, rather than sitting open and exposed indefinitely.
+async function placeMarketSell(symbol, quantity) {
+  return signedRequest('POST', '/api/v3/order', {
+    symbol,
+    side: 'SELL',
+    type: 'MARKET',
+    quantity
+  });
+}
+
+// Cancels both legs of an OCO order list — called right before the
+// emergency market sell above, so the stale stop/limit legs don't linger
+// as orphaned orders once the position is closed a different way.
+async function cancelOrderList(symbol, orderListId) {
+  return signedRequest('DELETE', '/api/v3/orderList', { symbol, orderListId });
+}
+
 // OCO (One-Cancels-the-Other) sell: a limit sell at the take-profit price
 // and a stop-limit sell at the stop-loss price, whichever fills first
 // cancels the other — this is what makes the "get in, take a small

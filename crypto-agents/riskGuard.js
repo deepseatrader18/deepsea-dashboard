@@ -1,5 +1,12 @@
 const config = require('./config');
 
+// Total capital currently committed across every open position — the
+// number MAX_TOTAL_EXPOSURE_PCT is measured against, independent of how
+// many separate positions that capital happens to be spread across.
+function calculateOpenExposure(state) {
+  return Object.values(state.openPositions).reduce((sum, pos) => sum + pos.qty * pos.entryPrice, 0);
+}
+
 // The one place that is allowed to say "no" for account-safety reasons —
 // independent of whatever the team's analysis concluded. Even a unanimous
 // BUY from the researchers/discussion/portfolio agents is blocked here if
@@ -7,13 +14,24 @@ const config = require('./config');
 function checkGlobalLimits(state, currentBalance) {
   const openCount = Object.keys(state.openPositions).length;
   // MAX_CONCURRENT_TRADES <= 0 means "no cap" — trade on every coin that
-  // clears the team's own bar, however many that turns out to be. Capital
-  // itself still self-limits this: as more positions open, free balance
-  // shrinks (see pipeline.js/state.js paper-balance reservation), so
-  // Position Sizer eventually starts rejecting trades once free balance
-  // drops below the exchange's minimum order size.
+  // clears the team's own bar, however many that turns out to be. The real
+  // safety net against that is MAX_TOTAL_EXPOSURE_PCT below, not a count.
   if (config.MAX_CONCURRENT_TRADES > 0 && openCount >= config.MAX_CONCURRENT_TRADES) {
     return { ok: false, reason: `Max concurrent trades reached (${openCount}/${config.MAX_CONCURRENT_TRADES})` };
+  }
+
+  // Hard ceiling on total capital at risk at once, regardless of how many
+  // positions that's spread across — this is what actually keeps the
+  // account from being wiped out with an uncapped trade count: however
+  // many coins the team finds, never more than this fraction of the
+  // account's starting-of-day balance can be committed at the same time.
+  const referenceBalance = state.dayStartBalance || config.PAPER_STARTING_BALANCE;
+  if (config.MAX_TOTAL_EXPOSURE_PCT > 0 && referenceBalance > 0) {
+    const openExposure = calculateOpenExposure(state);
+    const exposurePct = (openExposure / referenceBalance) * 100;
+    if (exposurePct >= config.MAX_TOTAL_EXPOSURE_PCT) {
+      return { ok: false, reason: `Total capital at risk across open positions is ${exposurePct.toFixed(1)}% (cap ${config.MAX_TOTAL_EXPOSURE_PCT}%) — no new entries until one closes` };
+    }
   }
 
   if (state.dayStartBalance) {
