@@ -56,8 +56,8 @@ async function handleSurge(surge) {
     if (trace.decision.action === 'buy') {
       console.log(`ENTERED ${trace.symbol} (${trace.executed.mode}): ${trace.decision.reasoning}`);
       telegram.sendTelegramMessage(telegram.formatTradeOpen(trace.executed));
+      stateStore.save(state); // only a 'buy' actually changes persisted state (openPositions) — a 'hold' has nothing new to save
     }
-    stateStore.save(state);
   } catch (err) {
     console.error(`Pipeline failed for ${surge.symbol}:`, err.message);
   } finally {
