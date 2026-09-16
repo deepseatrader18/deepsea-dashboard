@@ -1,0 +1,13 @@
+{
+  "name": "deepsea-forex-agents",
+  "version": "1.0.0",
+  "private": true,
+  "description": "DeepSea Forex Team — OANDA multi-pair multi-agent scalp-trading pipeline (majors + gold). Runs on the owner's own laptop, alongside crypto-agents/.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5"
+  }
+}
