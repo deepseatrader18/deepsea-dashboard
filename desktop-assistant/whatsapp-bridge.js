@@ -368,8 +368,28 @@ client.on('message_create', async msg => {
   }
 });
 
+// A real OS sleep/resume on the laptop (e.g. from the "sleep mode par
+// dalo" command) can leave the underlying WhatsApp Web/Puppeteer session
+// broken — Chromium pauses along with the OS, and its CDP connection
+// often doesn't survive the resume ("Attempted to use detached Frame").
+// Once that happens every client.* call fails forever, so instead of just
+// logging and staying half-alive, restart the whole process: a fresh
+// browser session reuses the cached WhatsApp login (no QR needed) and
+// recovers on its own, without anyone having to notice and restart it by hand.
+let restartingAfterCrash = false;
 process.on('unhandledRejection', err => {
-  console.error('Unhandled error (bridge stays up):', err);
+  console.error('Unhandled error — restarting bridge to recover:', err);
+  if (restartingAfterCrash) return;
+  restartingAfterCrash = true;
+  setTimeout(() => {
+    const child = spawn(process.argv[0], [process.argv[1]], {
+      cwd: __dirname,
+      detached: true,
+      stdio: 'inherit'
+    });
+    child.unref();
+    process.exit(1);
+  }, 3000);
 });
 
 client.initialize();
