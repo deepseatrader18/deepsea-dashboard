@@ -548,7 +548,14 @@ app.get('/api/code-request/status', requireBridgeToken, (req, res) => {
 // so live order placement needs its own explicit risk-limit design before
 // it's built, not bundled in here.
 const COINGECKO_MARKETS_URL = 'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=volume_desc&per_page=250&page=1&price_change_percentage=24h';
-const VOLUME_SCAN_INTERVAL_MS = 2 * 60 * 1000;
+// Free, keyless CoinGecko calls share a rate limit across everyone on the
+// same outbound IP — on a shared host like Render's free tier that limit
+// gets eaten by other tenants fast (seen live as "status 429"). A free
+// CoinGecko "Demo" API key (coingecko.com/en/developers/dashboard) gets
+// its own dedicated quota instead; set COINGECKO_API_KEY on Render to use
+// one once you have it. Falls back to keyless calls if unset.
+const COINGECKO_API_KEY = process.env.COINGECKO_API_KEY || null;
+const VOLUME_SCAN_INTERVAL_MS = 3 * 60 * 1000;
 const VOLUME_HISTORY_LEN = 10; // ~20 min of history before a coin gets its own baseline
 const VOLUME_SURGE_MULTIPLIER = 3; // this interval's volume vs. the coin's own recent average
 const MIN_DELTA_USD = 200_000; // ignore tiny absolute moves even if the multiplier looks big
@@ -562,7 +569,8 @@ let volumeAlerts = []; // { id, symbol, message, createdAt }
 
 async function scanVolumeSurges() {
   try {
-    const res = await fetch(COINGECKO_MARKETS_URL, { signal: AbortSignal.timeout(15000) });
+    const headers = COINGECKO_API_KEY ? { 'x-cg-demo-api-key': COINGECKO_API_KEY } : {};
+    const res = await fetch(COINGECKO_MARKETS_URL, { headers, signal: AbortSignal.timeout(15000) });
     if (!res.ok) throw new Error('status ' + res.status);
     const coins = await res.json();
     const now = Date.now();
