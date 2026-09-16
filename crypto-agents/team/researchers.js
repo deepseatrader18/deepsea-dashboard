@@ -1,5 +1,6 @@
-// Research Team: two independent analysts look at the same 1-minute klines
-// for a volume-surging coin and each form their own view, exactly like the
+// Research Team: two independent analysts look at the same klines (see
+// config.KLINE_INTERVAL) for a volume-surging coin and each form their own
+// view, exactly like the
 // existing TradingAgents Bull/Bear split in trading-agents-service/, but
 // short-timeframe and deterministic (no LLM) since a scalp entry needs an
 // answer in milliseconds, not minutes.

@@ -64,6 +64,10 @@ const config = {
   // together before the Bull Debater will support entry — fewer, higher-
   // conviction trades rather than acting on every borderline agreement.
   MIN_BULL_CONFIDENCE: num('MIN_BULL_CONFIDENCE', 40),
+  // Candle timeframe the Research/Skeptic team analyzes per surge. Widened
+  // from 1m to 5m per the account owner's request — steadier signal, less
+  // noise from single-minute wicks.
+  KLINE_INTERVAL: process.env.KLINE_INTERVAL || '5m',
   // 0 (or any non-positive value) means no cap — trade every coin that
   // clears the team's bar, however many that is. Capital still
   // self-limits this in practice: free balance shrinks as positions open

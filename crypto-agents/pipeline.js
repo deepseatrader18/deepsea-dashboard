@@ -34,7 +34,7 @@ async function runForSymbol(surge, state) {
     return { symbol: surge.symbol, decision: { action: 'hold', reasoning: cooldownCheck.reason } };
   }
 
-  const klines = await futuresClient.getKlines(surge.symbol, '1m', 30);
+  const klines = await futuresClient.getKlines(surge.symbol, config.KLINE_INTERVAL, 30);
   const researchA = momentumResearch(klines);
   const researchB = volumeResearch(klines);
   const discussion = discuss({ researchA, researchB, surge, klines });
