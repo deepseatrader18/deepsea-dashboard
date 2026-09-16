@@ -174,9 +174,9 @@ padega (jab tak `.wwebjs_auth` folder delete na karo).
 
 **"Sleep mode" command ke baad:** laptop ko actually sleep mein bhejne se WhatsApp
 bridge ka background browser session (jisse ye WhatsApp se connect rehta hai)
-kabhi-kabhi toot jata hai jab laptop wapas jagta hai. Agar laptop jagne ke baad
-WhatsApp se reply aana band ho jaye, bridge wali terminal window mein `Ctrl+C`
-dabakar `npm start` se dobara chala dein — QR dobara scan nahi karna padega.
+kabhi-kabhi toot jata hai jab laptop wapas jagta hai. Bridge ab isse khud detect
+karke apne aap restart ho jata hai (QR dobara scan nahi karna padta) — manually
+kuch karne ki zaroorat nahi.
 
 ### Customize (`.env` में)
 
@@ -211,3 +211,40 @@ haan
 60 second ke andar, tabhi wo command laptop par chalegi. Kuch aur likho ya chup raho to cancel ho jata hai — bilkul voice wale confirm jaisa hi safety gate hai.
 
 Agar text koi laptop command nahi hai (jaise "gold ka trade plan batao"), to bridge use seedha dashboard ke DeepSea assistant ko bhej deta hai, jaisa pehle karta tha.
+
+## Discord bridge (optional) — WhatsApp ka backup
+
+WhatsApp bridge ke jaisa hi ek aur script (`discord-bridge.js`), lekin Discord ke
+**official Bot API** se — koi browser automation nahi, isliye WhatsApp wale
+sleep/resume jaise crash ka risk nahi. Agar kabhi WhatsApp bridge down ho, isse
+DeepSea se baat kar sakte hain.
+
+### Setup
+
+1. https://discord.com/developers/applications khole, "New Application" par click
+   karke koi bhi naam de do (jaise "DeepSea").
+2. Left menu mein "Bot" tab par jao, "Reset Token" dabakar token copy kar lo.
+3. Usi Bot tab mein neeche "Privileged Gateway Intents" ke andar
+   **"Message Content Intent"** on kar do — bina iske bot message padh nahi payega.
+4. Apna Discord user ID lena ho to: Discord app mein Settings → Advanced →
+   "Developer Mode" on karo, phir apne naam par right-click karke "Copy User ID".
+5. `.env` mein bharo:
+   - `DISCORD_BOT_TOKEN` — step 2 wala token
+   - `ALLOWED_DISCORD_USER_ID` — step 4 wala ID (iske bina koi bhi jo bot ko
+     message kare use command de sakega)
+6. Bot ko ek server mein invite karna hoga (koi bhi apna naya private server bana
+   lo — Discord app mein "+" dabakar "Create My Own" → "For me and my friends"):
+   OAuth2 tab mein jao → "URL Generator" → scopes mein `bot` check karo →
+   permissions mein "Send Messages" aur "Read Message History" check karo →
+   neeche bani hui URL ko browser mein khol kar apna server select karo.
+7. Bridge chalao:
+   ```
+   npm run start:discord
+   ```
+8. Us server ke kisi bhi channel mein likho:
+   ```
+   deepsea gold ka trade plan batao
+   ```
+
+`WHATSAPP_BRIDGE_TOKEN` aur `DASHBOARD_CHAT_URL` wahi values use hoti hain jo
+WhatsApp bridge ke liye pehle se `.env` mein set hain — alag se kuch nahi karna.
