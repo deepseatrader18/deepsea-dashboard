@@ -1,20 +1,46 @@
+const config = require('../config');
+const marketFilter = require('../marketFilter');
+
 // Discussion Team: two agents debate the Research Team's two independent
 // reads before anything reaches Portfolio Management. One argues the case
 // for entering, one actively hunts for reasons not to — a volume surge on
 // an exchange is exactly the kind of signal a pump-and-dump can fake, so
 // the Skeptic Debater's job is specifically to catch that.
 
-// Bull Debater: is there actual agreement between the two researchers?
+// Bull Debater: is there actual agreement between the two researchers, and
+// is it a strong enough read to act on? Fewer, higher-conviction trades
+// beats trading every borderline signal — a weak-confidence agreement
+// (e.g. both researchers barely lean bullish) is exactly the kind of
+// signal that was producing losers.
 function bullCase(researchA, researchB) {
   const agree = researchA.bias === researchB.bias && researchA.bias === 'bullish';
   const avgConfidence = (researchA.confidence + researchB.confidence) / 2;
+  const strongEnough = agree && avgConfidence >= config.MIN_BULL_CONFIDENCE;
   return {
     agent: 'Bull Debater',
-    supportsEntry: agree,
-    confidence: agree ? avgConfidence : 0,
-    notes: agree
-      ? `Both researchers agree: bullish momentum (${researchA.confidence}) and bullish volume (${researchB.confidence}).`
-      : `No clean agreement — Momentum says ${researchA.bias}, Volume says ${researchB.bias}. Not enough to argue for entry.`
+    supportsEntry: strongEnough,
+    confidence: strongEnough ? avgConfidence : 0,
+    notes: !agree
+      ? `No clean agreement — Momentum says ${researchA.bias}, Volume says ${researchB.bias}. Not enough to argue for entry.`
+      : strongEnough
+        ? `Both researchers agree with strong conviction: bullish momentum (${researchA.confidence}) and bullish volume (${researchB.confidence}), average ${avgConfidence.toFixed(0)} >= ${config.MIN_BULL_CONFIDENCE} bar.`
+        : `Both researchers lean bullish but too weakly (average confidence ${avgConfidence.toFixed(0)} < ${config.MIN_BULL_CONFIDENCE} bar) — skipping a low-conviction signal.`
+  };
+}
+
+// Market Filter: most altcoins move with Bitcoin most of the time — a
+// bullish signal on some other coin means far less if BTC itself is
+// trending down right now, since the alt is more likely to reverse with
+// it than hold its own move.
+function marketCase() {
+  const trend = marketFilter.getBtcTrend();
+  const blocksEntry = trend.bias === 'bearish';
+  return {
+    agent: 'Market Filter',
+    blocksEntry,
+    notes: trend.bias === 'unknown'
+      ? 'BTC trend not available yet — proceeding without this check.'
+      : `BTC 5m trend is ${trend.bias}.${blocksEntry ? ' Skipping — broader market is trending down, alt longs are more likely to reverse with it.' : ''}`
   };
 }
 
@@ -71,16 +97,18 @@ function skepticCase(surge, klines) {
 function discuss({ researchA, researchB, surge, klines }) {
   const bull = bullCase(researchA, researchB);
   const skeptic = skepticCase(surge, klines);
-  const proceed = bull.supportsEntry && !skeptic.blocksEntry;
+  const market = marketCase();
+  const proceed = bull.supportsEntry && !skeptic.blocksEntry && !market.blocksEntry;
 
   return {
     proceed,
     confidence: proceed ? bull.confidence : 0,
     bull,
     skeptic,
+    market,
     reasoning: proceed
-      ? `Discussion Team: proceed. ${bull.notes} Skeptic check clear: ${skeptic.notes}`
-      : `Discussion Team: hold. ${!bull.supportsEntry ? bull.notes : ''} ${skeptic.blocksEntry ? skeptic.notes : ''}`.trim()
+      ? `Discussion Team: proceed. ${bull.notes} Skeptic check clear: ${skeptic.notes} Market check: ${market.notes}`
+      : `Discussion Team: hold. ${!bull.supportsEntry ? bull.notes : ''} ${skeptic.blocksEntry ? skeptic.notes : ''} ${market.blocksEntry ? market.notes : ''}`.trim()
   };
 }
 

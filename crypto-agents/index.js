@@ -9,6 +9,7 @@ const reporter = require('./reporter');
 const telegram = require('./telegram');
 const balanceCache = require('./balanceCache');
 const stateStore = require('./state');
+const marketFilter = require('./marketFilter');
 
 // The Crypto Team's main loop — meant to run on the owner's own VPS/laptop,
 // NOT on Render (Binance returns 451/403 to US-hosted datacenter IPs,
@@ -143,6 +144,12 @@ async function main() {
   // Refresh exchangeInfo periodically — symbols get added/delisted and
   // filters occasionally change; stale filters would round orders wrong.
   setInterval(() => binance.loadExchangeInfo().catch(err => console.error('exchangeInfo refresh failed:', err.message)), 6 * 60 * 60 * 1000);
+
+  // Broad market regime (BTC trend) — refreshed in the background, not on
+  // the hot per-trade path, since it changes far slower than any single
+  // coin's volume surge. See marketFilter.js / team/discussion.js.
+  await marketFilter.refreshBtcTrend();
+  setInterval(() => marketFilter.refreshBtcTrend(), 60_000);
 
   // Correct the in-memory live balance for fee drift periodically — never
   // on the hot trading path itself (see balanceCache.js).

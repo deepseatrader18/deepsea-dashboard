@@ -49,6 +49,10 @@ const config = {
   // the confirmation wait, the move hasn't paused at all — skip it rather
   // than chase.
   ENTRY_MAX_CHASE_PCT: num('ENTRY_MAX_CHASE_PCT', 0.15),
+  // Minimum average confidence (0-100) the two researchers must show
+  // together before the Bull Debater will support entry — fewer, higher-
+  // conviction trades rather than acting on every borderline agreement.
+  MIN_BULL_CONFIDENCE: num('MIN_BULL_CONFIDENCE', 40),
   // 0 (or any non-positive value) means no cap — trade every coin that
   // clears the team's bar, however many that is. Capital still
   // self-limits this in practice: free balance shrinks as positions open
