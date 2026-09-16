@@ -99,6 +99,13 @@ async function getKlines(symbol, interval = '1m', limit = 60) {
   return publicRequest('/api/v3/klines', { symbol, interval, limit });
 }
 
+// Single-symbol current price — used to re-check price a few seconds after
+// a surge is first seen, before actually entering (see pipeline.js).
+async function getPrice(symbol) {
+  const data = await publicRequest('/api/v3/ticker/price', { symbol });
+  return parseFloat(data.price);
+}
+
 async function getAccountBalances() {
   const data = await signedRequest('GET', '/api/v3/account');
   return data.balances || [];
@@ -150,6 +157,7 @@ module.exports = {
   roundStep,
   getAllTickers24hr,
   getKlines,
+  getPrice,
   getAccountBalances,
   getFreeBalance,
   placeMarketBuy,

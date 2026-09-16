@@ -1,3 +1,4 @@
+const config = require('./config');
 const binance = require('./binanceClient');
 const { momentumResearch, volumeResearch } = require('./team/researchers');
 const { discuss } = require('./team/discussion');
@@ -45,6 +46,32 @@ async function runForSymbol(surge, state) {
 
   if (decision.action !== 'buy') {
     return trace;
+  }
+
+  // Confirm the move hasn't kept accelerating before actually committing
+  // capital. Buying the instant a surge is detected means buying the exact
+  // top of the spike — real paper-trading results showed that pattern
+  // tripping the stop-loss almost every time. A short pause lets a genuine
+  // pullback/stabilization show up first.
+  if (config.ENTRY_CONFIRM_DELAY_MS > 0) {
+    await new Promise(resolve => setTimeout(resolve, config.ENTRY_CONFIRM_DELAY_MS));
+    const confirmPrice = await binance.getPrice(surge.symbol).catch(() => null);
+    if (confirmPrice != null) {
+      const chasePct = ((confirmPrice - decision.entryPrice) / decision.entryPrice) * 100;
+      if (chasePct > config.ENTRY_MAX_CHASE_PCT) {
+        trace.decision = {
+          action: 'hold',
+          reasoning: `${decision.reasoning} [SKIPPED after confirmation wait — price kept running (+${chasePct.toFixed(2)}% further over ${config.ENTRY_CONFIRM_DELAY_MS / 1000}s), too risky to chase a still-accelerating spike.]`
+        };
+        return trace;
+      }
+      // Re-anchor entry/exit levels to the confirmed (post-wait) price
+      // rather than the stale surge-detection price.
+      decision.entryPrice = confirmPrice;
+      decision.tpPrice = Number((confirmPrice * (1 + config.TAKE_PROFIT_PCT / 100)).toPrecision(12));
+      decision.slStopPrice = Number((confirmPrice * (1 - config.STOP_LOSS_PCT / 100)).toPrecision(12));
+      decision.slLimitPrice = Number((decision.slStopPrice * 0.998).toPrecision(12));
+    }
   }
 
   const executed = await executor.executePlan(decision);

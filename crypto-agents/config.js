@@ -34,8 +34,21 @@ const config = {
 
   // --- Position sizing & scalp targets (conservative defaults) ---
   PER_TRADE_RISK_PCT: num('PER_TRADE_RISK_PCT', 1), // % of free quote balance risked per trade
-  TAKE_PROFIT_PCT: num('TAKE_PROFIT_PCT', 0.6), // quick scalp target
-  STOP_LOSS_PCT: num('STOP_LOSS_PCT', 0.35), // tight stop, kept smaller than TP
+  // Widened slightly from the original 0.6/0.35 after real paper-trading
+  // showed the stop was tight enough to catch normal post-spike noise, not
+  // just genuine reversals — same ~1.7:1 reward:risk ratio, more room.
+  TAKE_PROFIT_PCT: num('TAKE_PROFIT_PCT', 0.8), // quick scalp target
+  STOP_LOSS_PCT: num('STOP_LOSS_PCT', 0.5), // tight stop, kept smaller than TP
+  // After a surge is detected, wait this long and re-check price before
+  // actually entering — buying the instant a surge is seen means buying
+  // the exact top of the spike, right before the pullback that was
+  // tripping the stop-loss almost every time. A short pause lets a real
+  // pullback/stabilization show up before committing capital.
+  ENTRY_CONFIRM_DELAY_MS: num('ENTRY_CONFIRM_DELAY_MS', 8_000),
+  // If price is still running further away by more than this much during
+  // the confirmation wait, the move hasn't paused at all — skip it rather
+  // than chase.
+  ENTRY_MAX_CHASE_PCT: num('ENTRY_MAX_CHASE_PCT', 0.15),
   // 0 (or any non-positive value) means no cap — trade every coin that
   // clears the team's bar, however many that is. Capital still
   // self-limits this in practice: free balance shrinks as positions open
