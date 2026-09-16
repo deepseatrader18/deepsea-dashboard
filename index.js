@@ -527,55 +527,76 @@ app.get('/api/code-request/status', requireBridgeToken, (req, res) => {
   res.json({ ready: true, text: codeRequest.text, ok: codeRequest.ok, summary: codeRequest.summary });
 });
 
-// Binance volume scanner: alerts only, no auto-trading. Polls Binance's
-// public 24hr ticker for every USDT pair every couple of minutes and
-// flags a sudden jump in 24h quote volume — the kind of move that often
-// means a coin is starting to run. Deliberately alert-only for now: a
-// "buy where volume shows up" bot is a real-money momentum strategy
-// (vulnerable to pump-and-dump volume fakes), so live order placement
-// needs its own explicit risk-limit design before it's built, not bundled
-// in here.
-const BINANCE_TICKER_URL = 'https://api.binance.com/api/v3/ticker/24hr';
+// Volume-surge scanner: alerts only, no auto-trading. Uses CoinGecko's
+// public markets endpoint (an aggregator across exchanges, not an exchange
+// itself) rather than a single exchange's API — Binance, Bybit and KuCoin
+// all return 451/403 and refuse requests from US-hosted servers (this app
+// runs on Render's Oregon region) for regulatory reasons, so a single-
+// exchange ticker wasn't reachable from here at all. CoinGecko has no such
+// block and its coverage spans far more exchanges/coins than any one of
+// them anyway.
+//
+// Each coin's own recent volume is used as its baseline (not a fixed
+// threshold): every scan, a coin's volume-added-this-interval is compared
+// to the average of its last several intervals, and a multiple of that
+// average — not a raw 24h-total comparison — is what counts as a surge.
+// 24h volume is a slow-moving rolling total, so comparing it snapshot-to-
+// snapshot every couple of minutes almost never moves enough to fire.
+//
+// Deliberately alert-only for now: a "buy where volume shows up" bot is a
+// real-money momentum strategy (vulnerable to pump-and-dump volume fakes),
+// so live order placement needs its own explicit risk-limit design before
+// it's built, not bundled in here.
+const COINGECKO_MARKETS_URL = 'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=volume_desc&per_page=250&page=1&price_change_percentage=24h';
 const VOLUME_SCAN_INTERVAL_MS = 2 * 60 * 1000;
-const VOLUME_SURGE_PCT = 25; // % jump in 24h quote volume between scans to count as a surge
-const MIN_QUOTE_VOLUME_USDT = 2_000_000; // ignore illiquid pairs — too easy to fake their volume
-const ALERT_COOLDOWN_MS = 30 * 60 * 1000; // don't re-alert the same symbol too often while it stays elevated
+const VOLUME_HISTORY_LEN = 10; // ~20 min of history before a coin gets its own baseline
+const VOLUME_SURGE_MULTIPLIER = 3; // this interval's volume vs. the coin's own recent average
+const MIN_DELTA_USD = 200_000; // ignore tiny absolute moves even if the multiplier looks big
+const MIN_TOTAL_VOLUME_USD = 1_000_000; // ignore illiquid coins entirely
+const ALERT_COOLDOWN_MS = 30 * 60 * 1000; // don't re-alert the same coin too often while it stays elevated
 const VOLUME_ALERTS_MAX = 200;
 
-let binancePrevVolume = {}; // symbol -> last-seen 24h quoteVolume
-let lastVolumeAlertAt = {}; // symbol -> timestamp of last alert
+let coinVolumeHistory = {}; // coingecko id -> { prevVolume, deltas: [] }
+let lastVolumeAlertAt = {}; // coingecko id -> timestamp of last alert
 let volumeAlerts = []; // { id, symbol, message, createdAt }
 
-async function scanBinanceVolume() {
+async function scanVolumeSurges() {
   try {
-    const res = await fetch(BINANCE_TICKER_URL, { signal: AbortSignal.timeout(15000) });
+    const res = await fetch(COINGECKO_MARKETS_URL, { signal: AbortSignal.timeout(15000) });
     if (!res.ok) throw new Error('status ' + res.status);
-    const tickers = await res.json();
+    const coins = await res.json();
     const now = Date.now();
 
-    for (const t of tickers) {
-      if (!t.symbol || !t.symbol.endsWith('USDT')) continue;
-      const qv = parseFloat(t.quoteVolume);
-      if (!Number.isFinite(qv) || qv < MIN_QUOTE_VOLUME_USDT) continue;
+    for (const c of coins) {
+      const vol = c.total_volume;
+      if (!Number.isFinite(vol) || vol < MIN_TOTAL_VOLUME_USD) continue;
 
-      const prev = binancePrevVolume[t.symbol];
-      binancePrevVolume[t.symbol] = qv;
-      if (prev === undefined || prev <= 0) continue; // no baseline yet on first sighting
+      const h = coinVolumeHistory[c.id] || (coinVolumeHistory[c.id] = { prevVolume: null, deltas: [] });
+      if (h.prevVolume === null) { h.prevVolume = vol; continue; } // first sighting, no baseline yet
 
-      const pctChange = ((qv - prev) / prev) * 100;
-      if (pctChange < VOLUME_SURGE_PCT) continue;
+      const delta = vol - h.prevVolume;
+      h.prevVolume = vol;
+      const priorDeltas = h.deltas.filter(d => d > 0);
+      h.deltas.push(Math.max(delta, 0));
+      if (h.deltas.length > VOLUME_HISTORY_LEN) h.deltas.shift();
+      if (delta <= 0) continue;
 
-      const lastAlert = lastVolumeAlertAt[t.symbol] || 0;
+      const baseline = priorDeltas.length >= 3 ? priorDeltas.reduce((a, b) => a + b, 0) / priorDeltas.length : null;
+      if (baseline === null) continue; // not enough history yet for this coin
+      if (delta < MIN_DELTA_USD || delta < baseline * VOLUME_SURGE_MULTIPLIER) continue;
+
+      const lastAlert = lastVolumeAlertAt[c.id] || 0;
       if (now - lastAlert < ALERT_COOLDOWN_MS) continue;
-      lastVolumeAlertAt[t.symbol] = now;
+      lastVolumeAlertAt[c.id] = now;
 
-      const priceChange = parseFloat(t.priceChangePercent);
-      const priceStr = Number.isFinite(priceChange) ? `${priceChange >= 0 ? '+' : ''}${priceChange}%` : '--';
+      const priceChange = c.price_change_percentage_24h;
+      const priceStr = Number.isFinite(priceChange) ? `${priceChange >= 0 ? '+' : ''}${priceChange.toFixed(2)}%` : '--';
+      const symbol = (c.symbol || c.id).toUpperCase();
       volumeAlerts.push({
         id: crypto.randomUUID(),
-        symbol: t.symbol,
+        symbol,
         createdAt: now,
-        message: `${t.symbol} mein volume achanak ~${Math.round(pctChange)}% badh gaya (24h volume ~$${Math.round(qv).toLocaleString('en-US')}), price ${priceStr}.`
+        message: `${symbol} mein volume achanak badh gaya (is interval mein ~$${Math.round(delta).toLocaleString('en-US')}, apne average se ${(delta / baseline).toFixed(1)}x zyada), 24h price ${priceStr}.`
       });
     }
 
@@ -583,12 +604,12 @@ async function scanBinanceVolume() {
       volumeAlerts = volumeAlerts.slice(-VOLUME_ALERTS_MAX);
     }
   } catch (err) {
-    console.error('Binance volume scan failed:', err.message);
+    console.error('Volume scan failed:', err.message);
   }
 }
 
-setInterval(scanBinanceVolume, VOLUME_SCAN_INTERVAL_MS);
-scanBinanceVolume();
+setInterval(scanVolumeSurges, VOLUME_SCAN_INTERVAL_MS);
+scanVolumeSurges();
 
 function getVolumeAlertsSince(sinceRaw) {
   const since = parseInt(sinceRaw, 10) || 0;
