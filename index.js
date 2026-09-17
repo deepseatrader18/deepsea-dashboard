@@ -2,7 +2,7 @@ const express = require('express');
 const session = require('express-session');
 const path = require('path');
 const { buildAgents, checkAllAgents } = require('./agents');
-const { getForexFactoryNews } = require('./trading/news');
+const { getForexFactoryNews, getEconomicCalendar } = require('./trading/news');
 const { getTechnicalAnalysis } = require('./trading/technical');
 const { buildTradePlan } = require('./trading/tradePlan');
 const app = express();
@@ -106,6 +106,15 @@ app.get('/api/status', requireAuth, async (req, res) => {
       ? { connected: true, unreadCount: gmail.data.unreadCount, latest: gmail.data.latest }
       : { connected: false }
   });
+});
+
+// Dedicated, real-data-only, fast-refreshing feed for the Trading Room's
+// Economic Calendar panel — kept separate from /api/nexus so the frontend
+// can poll it every few seconds (for news trading) without also re-running
+// the technical/trade-plan calls on that cadence.
+app.get('/api/calendar', requireAuth, async (req, res) => {
+  const calendar = await getEconomicCalendar();
+  res.json(calendar);
 });
 
 app.get('/api/nexus', requireAuth, async (req, res) => {

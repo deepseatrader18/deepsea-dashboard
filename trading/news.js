@@ -11,6 +11,23 @@ const CACHE_TTL_SUCCESS_MS = 3 * 60 * 1000; // the user wants results to show up
 const CACHE_TTL_FAILURE_MS = 2 * 60 * 1000; // retry sooner after a failure
 let cache = { at: 0, result: null };
 
+// The Economic Calendar panel is used for real news trading, so it is kept
+// on its own much shorter cache than the general news-context cache above,
+// and it NEVER falls back to AI-generated text — only the real structured
+// feed. If the feed is down, the panel says so instead of showing a guess.
+const CALENDAR_CACHE_TTL_SUCCESS_MS = 10 * 1000;
+const CALENDAR_CACHE_TTL_FAILURE_MS = 15 * 1000;
+let calendarCache = { at: 0, result: null };
+
+function istDateString(d) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(d);
+}
+
 // Free, keyless economic calendar feed — the primary source, since it has
 // worked reliably in practice (unlike forexfactory.com's own site, which
 // blocks requests from cloud/datacenter IPs the same way Yahoo Finance does).
@@ -258,4 +275,33 @@ async function getForexFactoryNews(env) {
   return result;
 }
 
-module.exports = { getForexFactoryNews };
+// Real, structured, live calendar data only — no scrape fallback (its items
+// have no time/actual fields anyway) and never the AI-search/AI-text
+// fallbacks used for chat reasoning. Filtered to events dated "today" in
+// IST, so it naturally rolls over to the next day's calendar at midnight IST
+// on its own, without needing any separate scheduled job.
+async function fetchEconomicCalendarToday() {
+  const calendar = await getFromPublicCalendar();
+  if (!calendar.available) return calendar;
+
+  const today = istDateString(new Date());
+  const todaysEvents = calendar.data.filter(e => e.date && istDateString(new Date(e.date)) === today);
+
+  return { available: true, data: todaysEvents };
+}
+
+async function getEconomicCalendar() {
+  const now = Date.now();
+  const ttl =
+    calendarCache.result && calendarCache.result.available
+      ? CALENDAR_CACHE_TTL_SUCCESS_MS
+      : CALENDAR_CACHE_TTL_FAILURE_MS;
+  if (calendarCache.result && now - calendarCache.at < ttl) {
+    return calendarCache.result;
+  }
+  const result = await fetchEconomicCalendarToday();
+  calendarCache = { at: now, result };
+  return result;
+}
+
+module.exports = { getForexFactoryNews, getEconomicCalendar };

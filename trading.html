@@ -543,7 +543,6 @@
 
       const technical = data.technical;
       const plan = data.plan;
-      const news = data.news;
 
       if (technical.available) {
         statusPill.className = 'pill live';
@@ -579,8 +578,6 @@
         setSignalGauge(null, null);
         document.getElementById('reasonText').textContent = `Trade plan not available right now (${plan.reason}).`;
       }
-
-      renderNews(news);
     } catch (err) {
       statusPill.className = 'pill stale';
       statusPill.textContent = 'Connection error';
@@ -602,9 +599,25 @@
     if (btn) switchSymbol(btn.dataset.symbol);
   });
 
+  // Economic Calendar: real Forex Factory data only, polled on its own fast
+  // cadence (independent of the 60s technical/trade-plan poll) so today's
+  // actual results and their notifications land with as little delay as
+  // possible for news trading.
+  async function loadCalendar(){
+    try {
+      const res = await fetch('/api/calendar');
+      const news = await res.json();
+      renderNews(news);
+    } catch (err) {
+      console.error('Calendar fetch failed:', err);
+    }
+  }
+
   loadChart(currentSymbol);
   loadNexusData(currentSymbol);
   setInterval(() => loadNexusData(currentSymbol), 60000);
+  loadCalendar();
+  setInterval(loadCalendar, 10000);
 </script>
 
 </body>
