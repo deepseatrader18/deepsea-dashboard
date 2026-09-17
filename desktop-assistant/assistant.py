@@ -90,6 +90,22 @@ CLAP_BLOCK_SIZE = 512
 # Default is a natural Indian-English voice that also handles Hindi words.
 EDGE_TTS_VOICE = os.getenv('EDGE_TTS_VOICE', 'en-IN-NeerjaNeural')
 
+# ElevenLabs gives a far more natural voice than free Edge TTS, but its free
+# tier blocks API access to voices entirely (confirmed via a real "Free
+# users cannot use library voices via the API" error, which is why this
+# moved to Edge TTS in the first place) — a paid plan (Starter or above) is
+# required. Leave ELEVENLABS_API_KEY unset to keep using free Edge TTS with
+# zero code changes; set it in .env once subscribed and speak_welcome()
+# below switches over automatically, falling back to Edge TTS if the
+# ElevenLabs call ever fails (rate limit, network, etc.).
+ELEVENLABS_API_KEY = os.getenv('ELEVENLABS_API_KEY', '')
+# Default is ElevenLabs' premade "Rachel" voice — pick your own from
+# https://elevenlabs.io/app/voice-library and set its ID here via .env.
+ELEVENLABS_VOICE_ID = os.getenv('ELEVENLABS_VOICE_ID', '21m00Tcm4TlvDq8ikWAM')
+# eleven_multilingual_v2 handles Hindi (Devanagari) text; eleven_turbo_v2_5
+# is faster/cheaper if you only need English.
+ELEVENLABS_MODEL_ID = os.getenv('ELEVENLABS_MODEL_ID', 'eleven_multilingual_v2')
+
 
 def has_wake_word(text):
     lower = text.lower()
@@ -508,10 +524,48 @@ def remote_dashboard_poll_loop():
         time.sleep(REMOTE_POLL_SECONDS)
 
 
+def _speak_elevenlabs(text):
+    """Returns True on success, False to fall back to Edge TTS."""
+    import tempfile
+
+    from playsound import playsound
+
+    try:
+        request = urllib.request.Request(
+            f'https://api.elevenlabs.io/v1/text-to-speech/{ELEVENLABS_VOICE_ID}',
+            data=json.dumps({
+                'text': text,
+                'model_id': ELEVENLABS_MODEL_ID,
+                'voice_settings': {'stability': 0.5, 'similarity_boost': 0.75}
+            }).encode('utf-8'),
+            method='POST'
+        )
+        request.add_header('xi-api-key', ELEVENLABS_API_KEY)
+        request.add_header('Content-Type', 'application/json')
+        request.add_header('Accept', 'audio/mpeg')
+        with urllib.request.urlopen(request, timeout=15) as response:
+            audio = response.read()
+
+        with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as f:
+            f.write(audio)
+            path = f.name
+        try:
+            playsound(path)
+        finally:
+            os.remove(path)
+        return True
+    except Exception as exc:
+        print(f'-> ElevenLabs voice failed, falling back to Edge TTS: {exc}')
+        return False
+
+
 def speak_welcome(text):
+    if ELEVENLABS_API_KEY and _speak_elevenlabs(text):
+        return
+
     # Microsoft Edge's free neural text-to-speech (no API key, no signup,
-    # no usage limit) — switched from ElevenLabs because its free tier
-    # blocks all voices ("Free users cannot use library voices via the API").
+    # no usage limit) — used whenever ElevenLabs isn't configured, or its
+    # call fails for any reason, so a voice reply is never silently lost.
     try:
         import asyncio
         import tempfile

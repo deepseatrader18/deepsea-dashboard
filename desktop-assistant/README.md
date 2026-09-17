@@ -58,8 +58,11 @@ Spotify (अगर set किया हो), DeepSea dashboard browser में
 welcome line बोली जाती है (साथ ही हर command confirm करते वक़्त भी यही आवाज़ बोलती है)। यह हर terminal
 session में सिर्फ एक बार चलता है — दोबारा चलाने के लिए `Ctrl+C` करके फिर से `python assistant.py` run करें।
 
-आवाज़ के लिए **Microsoft Edge TTS** (`edge-tts`) इस्तेमाल होता है — बिल्कुल free, unlimited, कोई API key
-या signup नहीं चाहिए (ElevenLabs से switch किया गया क्योंकि उसका free plan API से हर voice block कर देता है)।
+आवाज़ के लिए default **Microsoft Edge TTS** (`edge-tts`) इस्तेमाल होता है — बिल्कुल free, unlimited, कोई API key
+या signup नहीं चाहिए (ElevenLabs से switch किया गया था क्योंकि उसका free plan API से हर voice block कर देता है)।
+अगर आपके पास ElevenLabs का **paid** plan (Starter या ऊपर) है, तो `.env` में `ELEVENLABS_API_KEY` डाल दीजिए —
+`speak_welcome()` अपने आप उसी आवाज़ पर switch हो जाएगा, और अगर कभी वो call fail हो (network/limit) तो चुपचाप
+वापस free Edge TTS पर fall back कर देगा — कोई code change नहीं चाहिए।
 
 ### Setup
 
@@ -79,7 +82,9 @@ session में सिर्फ एक बार चलता है — द�
 
 | Setting | क्या करता है |
 | --- | --- |
-| `EDGE_TTS_VOICE` | कौन सी आवाज़ बोलेगी (default `en-IN-NeerjaNeural`) — list ke liye `edge-tts --list-voices` |
+| `EDGE_TTS_VOICE` | कौन सी free आवाज़ बोलेगी (default `en-IN-NeerjaNeural`) — list ke liye `edge-tts --list-voices` |
+| `ELEVENLABS_API_KEY` | खाली छोड़ने पर free Edge TTS ही चलता रहेगा — paid ElevenLabs key डालने पर उसी पर switch हो जाता है |
+| `ELEVENLABS_VOICE_ID` | ElevenLabs [voice library](https://elevenlabs.io/app/voice-library) से चुनी हुई voice ki ID (default "Rachel") |
 | `CLAP_ENABLED` | `false` करने पर clap-trigger पूरी तरह बंद हो जाता है (default `true`) |
 | `CLAP_SONG_URI` | Clap पर खुलने वाला Spotify/YouTube link (खाली छोड़ने पर कुछ नहीं खुलता) |
 | `CLAP_DASHBOARD_URL` | Clap पर browser में कौन सा URL खुले (default DeepSea dashboard) |
