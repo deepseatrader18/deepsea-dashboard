@@ -1135,8 +1135,10 @@
       }
 
       if (awaitingCommand) {
-        awaitingCommand = false;
-        recognition.lang = 'en-IN';
+        // Stay active — once the conversation has started, keep answering
+        // whatever's said next without needing the wake word again every
+        // single time. Only the mic being turned off stops this.
+        recognition.lang = 'hi-IN';
         tryLaptopCommand(spokenText).then(handled => {
           if (handled) return;
           if (tryOpenApp(spokenText)) return;
@@ -1159,7 +1161,15 @@
       micStatus.textContent = 'Boliye...';
     });
 
-    startListening();
+    // Greet immediately on page load and go straight into active listening,
+    // instead of waiting silently for the wake word — the Boss wants her
+    // active and talking the moment he opens the dashboard. speak()'s own
+    // onended handler calls startListening() once the greeting finishes, so
+    // no separate startListening() call is needed here.
+    awaitingCommand = true;
+    recognition.lang = 'hi-IN';
+    micStatus.textContent = 'Ji Boss, boliye...';
+    speak('जी बॉस, मैं आ गई। बोलिए, क्या करना है?');
   }
 </script>
 
