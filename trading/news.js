@@ -11,19 +11,6 @@ const CACHE_TTL_SUCCESS_MS = 3 * 60 * 1000; // the user wants results to show up
 const CACHE_TTL_FAILURE_MS = 2 * 60 * 1000; // retry sooner after a failure
 let cache = { at: 0, result: null };
 
-// The raw calendar feed is hit from two independent places (the general news
-// context below, and the Economic Calendar panel/dashboard) — without a
-// SHARED cache underneath both, they each poll the upstream feed on their
-// own schedule and the combined rate gets our IP 429'd by the free feed, as
-// happened in production. This is the single choke point every consumer of
-// the public calendar goes through, so the feed is only actually fetched
-// once per TTL window no matter how many features read it.
-const RAW_CALENDAR_CACHE_TTL_MS = 30 * 1000;
-const RAW_CALENDAR_FAILURE_BASE_MS = 2 * 60 * 1000; // first backoff on failure
-const RAW_CALENDAR_FAILURE_MAX_MS = 20 * 60 * 1000; // cap so it still self-heals within the day
-let rawCalendarCache = { at: 0, result: null };
-let rawCalendarConsecutiveFailures = 0;
-
 function istDateString(d) {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Kolkata',
@@ -33,74 +20,87 @@ function istDateString(d) {
   }).format(d);
 }
 
-// Free, keyless economic calendar feed — the primary source, since it has
-// worked reliably in practice (unlike forexfactory.com's own site, which
-// blocks requests from cloud/datacenter IPs the same way Yahoo Finance does).
+// The user has explicitly asked that this free feed NOT be polled on a fixed
+// short interval — checking it every couple of minutes all day is what got
+// our IP rate-limited in the first place. So this throttle is deliberately
+// conservative (at most once a minute on success) and backs off hard on
+// failure (2m, 4m, 8m, ... capped at 20m); the actual calling pattern above
+// this (ensureDailySnapshot/scheduleEventChecks below) only calls in once a
+// day plus a few checks near each event's own time, so in practice this
+// rarely even hits its own throttle.
+const RAW_THROTTLE_SUCCESS_MS = 60 * 1000;
+const RAW_FAILURE_BASE_MS = 2 * 60 * 1000;
+const RAW_FAILURE_MAX_MS = 20 * 60 * 1000;
+let rawCache = { at: 0, result: null };
+let rawConsecutiveFailures = 0;
+let rawInFlight = null;
+
 function currentFailureBackoffMs() {
-  // Doubles with each consecutive failure (2m, 4m, 8m, ... capped at 20m) so
-  // that if the feed is genuinely rate-limiting us, we back off harder
-  // instead of retrying every couple of minutes and extending the ban.
-  const backoff = RAW_CALENDAR_FAILURE_BASE_MS * Math.pow(2, Math.max(0, rawCalendarConsecutiveFailures - 1));
-  return Math.min(backoff, RAW_CALENDAR_FAILURE_MAX_MS);
+  const backoff = RAW_FAILURE_BASE_MS * Math.pow(2, Math.max(0, rawConsecutiveFailures - 1));
+  return Math.min(backoff, RAW_FAILURE_MAX_MS);
 }
 
-async function fetchRawCalendar() {
-  const now = Date.now();
-  const ttl = rawCalendarCache.result && rawCalendarCache.result.available
-    ? RAW_CALENDAR_CACHE_TTL_MS
-    : currentFailureBackoffMs();
-  if (rawCalendarCache.result && now - rawCalendarCache.at < ttl) {
-    return rawCalendarCache.result;
-  }
-
-  let result;
+async function fetchRawCalendarNow() {
   try {
     const res = await fetch(FF_CALENDAR_URL, {
       signal: AbortSignal.timeout(8000),
       headers: { 'User-Agent': BROWSER_USER_AGENT }
     });
     if (!res.ok) {
-      rawCalendarConsecutiveFailures++;
+      rawConsecutiveFailures++;
       const retryAfter = res.headers.get('retry-after');
       console.error(
         `Forex Factory public calendar fetch failed: http ${res.status}` +
           (retryAfter ? ` (retry-after: ${retryAfter}s)` : '') +
-          ` — backing off ${Math.round(currentFailureBackoffMs() / 1000)}s (consecutive failures: ${rawCalendarConsecutiveFailures})`
+          ` — backing off ${Math.round(currentFailureBackoffMs() / 1000)}s (consecutive failures: ${rawConsecutiveFailures})`
       );
-      result = { available: false, reason: `http ${res.status}` };
-    } else {
-      const events = await res.json();
-      if (!Array.isArray(events)) {
-        rawCalendarConsecutiveFailures++;
-        result = { available: false, reason: 'unexpected response shape' };
-      } else {
-        rawCalendarConsecutiveFailures = 0;
-        const highImpact = events
-          .filter(e => e && String(e.impact).toLowerCase() === 'high')
-          .map(e => ({
-            title: e.title || '(untitled)',
-            country: e.country || '',
-            date: e.date || null,
-            forecast: e.forecast || null,
-            previous: e.previous || null,
-            actual: e.actual || null
-          }))
-          .sort((a, b) => (a.date && b.date ? new Date(a.date) - new Date(b.date) : 0));
-        result = { available: true, data: highImpact };
-      }
+      return { available: false, reason: `http ${res.status}` };
     }
-  } catch (err) {
-    rawCalendarConsecutiveFailures++;
-    console.error('Forex Factory public calendar fetch failed:', err.message);
-    result = { available: false, reason: err.message };
-  }
 
-  rawCalendarCache = { at: now, result };
-  return result;
+    const events = await res.json();
+    if (!Array.isArray(events)) {
+      rawConsecutiveFailures++;
+      return { available: false, reason: 'unexpected response shape' };
+    }
+
+    rawConsecutiveFailures = 0;
+    const highImpact = events
+      .filter(e => e && String(e.impact).toLowerCase() === 'high')
+      .map(e => ({
+        title: e.title || '(untitled)',
+        country: e.country || '',
+        date: e.date || null,
+        forecast: e.forecast || null,
+        previous: e.previous || null,
+        actual: e.actual || null
+      }))
+      .sort((a, b) => (a.date && b.date ? new Date(a.date) - new Date(b.date) : 0));
+    return { available: true, data: highImpact };
+  } catch (err) {
+    rawConsecutiveFailures++;
+    console.error('Forex Factory public calendar fetch failed:', err.message);
+    return { available: false, reason: err.message };
+  }
+}
+
+async function fetchRawCalendarThrottled() {
+  const now = Date.now();
+  const ttl = rawCache.result && rawCache.result.available ? RAW_THROTTLE_SUCCESS_MS : currentFailureBackoffMs();
+  if (rawCache.result && now - rawCache.at < ttl) {
+    return rawCache.result;
+  }
+  if (rawInFlight) return rawInFlight; // concurrent callers share one request instead of firing their own
+
+  rawInFlight = fetchRawCalendarNow().then(result => {
+    rawCache = { at: Date.now(), result };
+    rawInFlight = null;
+    return result;
+  });
+  return rawInFlight;
 }
 
 async function getFromPublicCalendar() {
-  return fetchRawCalendar();
+  return fetchRawCalendarThrottled();
 }
 
 // Best-effort direct scrape of the page the user actually looks at. Render's
@@ -317,19 +317,87 @@ async function getForexFactoryNews(env) {
 
 // Real, structured, live calendar data only — no scrape fallback (its items
 // have no time/actual fields anyway) and never the AI-search/AI-text
-// fallbacks used for chat reasoning. Filtered to events dated "today" in
-// IST, so it naturally rolls over to the next day's calendar at midnight IST
-// on its own, without needing any separate scheduled job. Reads through the
-// same shared raw-calendar cache as getForexFactoryNews, so polling this
-// frequently from the frontend never means an extra upstream fetch.
-async function getEconomicCalendar() {
-  const calendar = await fetchRawCalendar();
-  if (!calendar.available) return calendar;
+// fallbacks used for chat reasoning.
+//
+// Per the user's explicit instruction: fetch the full day's calendar once at
+// IST rollover, then only check back for each event's actual result a
+// handful of times right around that event's own scheduled time — never on
+// a fixed short interval all day, since that's what got the free feed to
+// rate-limit us. /api/calendar and /api/news-dashboard can be polled by the
+// frontend as often as it likes; they just read this in-memory snapshot,
+// which the checks below update in the background.
+function eventKey(item) {
+  return `${item.country}|${item.title}|${item.date || ''}`;
+}
 
+let dailySnapshot = { day: null, events: [] };
+let scheduledTimers = [];
+let dailyFetchBlockedUntil = 0;
+
+const EVENT_CHECK_OFFSETS_MS = [0, 2 * 60 * 1000, 5 * 60 * 1000, 10 * 60 * 1000];
+const STALE_CHECKPOINT_MS = 40 * 60 * 1000; // don't bother firing a checkpoint this far after it was due
+const DAILY_FETCH_RETRY_MS = 15 * 60 * 1000; // if the once-a-day fetch itself fails, wait this long before retrying it
+
+async function refreshEventActual(key) {
+  const existing = dailySnapshot.events.find(e => eventKey(e) === key);
+  if (existing && existing.actual != null) return; // already have the real result, no need to hit the feed again
+
+  const fresh = await fetchRawCalendarThrottled();
+  if (!fresh.available) return; // a later scheduled checkpoint (if any remain) will retry
+
+  const updated = fresh.data.find(e => eventKey(e) === key);
+  if (!updated) return;
+  const idx = dailySnapshot.events.findIndex(e => eventKey(e) === key);
+  if (idx >= 0) dailySnapshot.events[idx] = updated;
+}
+
+function scheduleEventChecks(event) {
+  if (!event.date) return;
+  const eventTime = new Date(event.date).getTime();
+  if (isNaN(eventTime)) return;
+  const key = eventKey(event);
+
+  EVENT_CHECK_OFFSETS_MS.forEach(offsetMs => {
+    const targetTime = eventTime + offsetMs;
+    const fireInMs = targetTime - Date.now();
+    if (fireInMs < -STALE_CHECKPOINT_MS) return; // this checkpoint is long gone (e.g. server restarted late) — skip it
+    const delayMs = Math.max(fireInMs, 0); // already due (e.g. snapshot built after a restart) — check almost immediately
+    const timer = setTimeout(() => {
+      refreshEventActual(key).catch(err => console.error('Event actual refresh failed:', err.message));
+    }, delayMs);
+    scheduledTimers.push(timer);
+  });
+}
+
+async function ensureDailySnapshot() {
   const today = istDateString(new Date());
-  const todaysEvents = calendar.data.filter(e => e.date && istDateString(new Date(e.date)) === today);
+  if (dailySnapshot.day === today) {
+    return { available: true, data: dailySnapshot.events };
+  }
+
+  const now = Date.now();
+  if (now < dailyFetchBlockedUntil) {
+    return { available: false, reason: 'calendar feed temporarily unavailable, retrying automatically' };
+  }
+
+  const fresh = await fetchRawCalendarThrottled();
+  if (!fresh.available) {
+    dailyFetchBlockedUntil = now + DAILY_FETCH_RETRY_MS;
+    return { available: false, reason: fresh.reason };
+  }
+
+  scheduledTimers.forEach(clearTimeout);
+  scheduledTimers = [];
+
+  const todaysEvents = fresh.data.filter(e => e.date && istDateString(new Date(e.date)) === today);
+  dailySnapshot = { day: today, events: todaysEvents };
+  todaysEvents.forEach(scheduleEventChecks);
 
   return { available: true, data: todaysEvents };
+}
+
+async function getEconomicCalendar() {
+  return ensureDailySnapshot();
 }
 
 module.exports = { getForexFactoryNews, getEconomicCalendar };
