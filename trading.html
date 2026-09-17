@@ -143,6 +143,24 @@
   .news-item{font-size:12px;line-height:1.5;color:var(--text-dim);border-bottom:1px solid var(--border-soft);padding-bottom:8px;}
   .news-item .t{color:var(--text);font-weight:600;display:block;margin-bottom:2px;}
 
+  .notify-btn{
+    font-size:10px;font-weight:700;letter-spacing:.04em;padding:4px 9px;border-radius:6px;
+    border:1px solid var(--border);background:transparent;color:var(--text-dim);cursor:pointer;
+  }
+  .notify-btn.on{color:var(--bull);border-color:rgba(47,219,150,.35);background:var(--bull-soft);}
+
+  .cal-table{width:100%;border-collapse:collapse;font-size:11.5px;}
+  .cal-table th{text-align:left;color:var(--text-faint);font-weight:600;letter-spacing:.04em;text-transform:uppercase;font-size:9.5px;padding:0 6px 6px 0;}
+  .cal-table td{padding:6px 6px 6px 0;border-top:1px solid var(--border-soft);color:var(--text-dim);}
+  .cal-table td.title{color:var(--text);}
+  .cal-table td.actual{font-weight:700;}
+  .cal-table td.actual.released{color:var(--bull);}
+  .cal-table tr.flash{animation:calFlash 2.5s ease-out 1;}
+  @keyframes calFlash{
+    0%{background:rgba(53,199,255,.22);}
+    100%{background:transparent;}
+  }
+
   .risk-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px 16px;}
   .risk-cell .k{font-size:10px;color:var(--text-faint);letter-spacing:.08em;text-transform:uppercase;}
   .risk-cell .v{font-size:15px;font-weight:700;margin-top:3px;}
@@ -262,7 +280,8 @@
 
     <div class="panel">
       <div class="panel-head">
-        <div class="panel-title"><span class="dot" style="background:var(--amber)"></span>Recent News</div>
+        <div class="panel-title"><span class="dot" style="background:var(--amber)"></span>Economic Calendar</div>
+        <button class="notify-btn" id="notifyBtn">🔔 Notify me</button>
       </div>
       <div class="news-list" id="newsList">Loading…</div>
     </div>
@@ -409,6 +428,30 @@
     });
   }
 
+  let notificationsEnabled = false;
+  const lastActualByKey = new Map();
+
+  function eventKey(item){
+    return item.country + '|' + item.title + '|' + (item.date || '');
+  }
+
+  function fmtEventTime(dateStr){
+    if (!dateStr) return '—';
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
+  }
+
+  function notifyRelease(item){
+    if (!notificationsEnabled || typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+    try {
+      new Notification(`${item.country} — ${item.title}`, {
+        body: `Actual: ${item.actual}  (Forecast: ${item.forecast ?? 'n/a'}, Previous: ${item.previous ?? 'n/a'})`,
+        tag: eventKey(item)
+      });
+    } catch (e) { /* Notification constructor can throw on some browsers/contexts; ignore */ }
+  }
+
   function renderNews(news){
     const wrap = document.getElementById('newsList');
     if (!news.available) {
@@ -416,18 +459,65 @@
       return;
     }
     if (!news.data.length) {
-      wrap.innerHTML = '<div class="news-item">No notable news found.</div>';
+      wrap.innerHTML = '<div class="news-item">No notable high-impact events found this week.</div>';
       return;
     }
-    wrap.innerHTML = '';
-    news.data.slice(0, 8).forEach(item => {
-      const div = document.createElement('div');
-      div.className = 'news-item';
-      const extra = item.summary || (item.country ? `${item.country} — forecast: ${item.forecast ?? 'n/a'}, previous: ${item.previous ?? 'n/a'}` : '');
-      div.innerHTML = `<span class="t">${item.title}</span>${extra ? extra : ''}`;
-      wrap.appendChild(div);
+
+    const isCalendar = news.data[0].country !== undefined;
+
+    if (!isCalendar) {
+      wrap.innerHTML = '';
+      news.data.slice(0, 8).forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'news-item';
+        div.innerHTML = `<span class="t">${item.title}</span>${item.summary || ''}`;
+        wrap.appendChild(div);
+      });
+      return;
+    }
+
+    const table = document.createElement('table');
+    table.className = 'cal-table';
+    table.innerHTML = `<thead><tr><th>Time</th><th>Currency</th><th>Event</th><th>Forecast</th><th>Previous</th><th>Actual</th></tr></thead><tbody></tbody>`;
+    const tbody = table.querySelector('tbody');
+
+    news.data.slice(0, 20).forEach(item => {
+      const key = eventKey(item);
+      const isKnown = lastActualByKey.has(key);
+      const prevActual = lastActualByKey.get(key);
+      const justReleased = isKnown && prevActual == null && item.actual != null;
+
+      const row = document.createElement('tr');
+      if (justReleased) {
+        row.className = 'flash';
+        notifyRelease(item);
+      }
+      row.innerHTML = `<td>${fmtEventTime(item.date)}</td>` +
+        `<td>${item.country || '—'}</td>` +
+        `<td class="title">${item.title}</td>` +
+        `<td>${item.forecast ?? '—'}</td>` +
+        `<td>${item.previous ?? '—'}</td>` +
+        `<td class="actual${item.actual != null ? ' released' : ''}">${item.actual ?? '—'}</td>`;
+      tbody.appendChild(row);
+
+      lastActualByKey.set(key, item.actual ?? null);
     });
+
+    wrap.innerHTML = '';
+    wrap.appendChild(table);
   }
+
+  document.getElementById('notifyBtn').addEventListener('click', async () => {
+    if (typeof Notification === 'undefined') {
+      alert('This browser does not support notifications.');
+      return;
+    }
+    const permission = await Notification.requestPermission();
+    notificationsEnabled = permission === 'granted';
+    const btn = document.getElementById('notifyBtn');
+    btn.classList.toggle('on', notificationsEnabled);
+    btn.textContent = notificationsEnabled ? '🔔 Notifications on' : '🔔 Notify me';
+  });
 
   function addLogEntry(symbol, action, price){
     sessionLog.unshift({ symbol, action, price, time: new Date().toLocaleTimeString('en-GB', { hour12: false }) });

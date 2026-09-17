@@ -7,7 +7,7 @@ const RAPIDAPI_HOST = 'forex-factory-news.p.rapidapi.com';
 const BROWSER_USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
-const CACHE_TTL_SUCCESS_MS = 10 * 60 * 1000; // 10 minutes
+const CACHE_TTL_SUCCESS_MS = 3 * 60 * 1000; // the user wants results to show up promptly after release
 const CACHE_TTL_FAILURE_MS = 2 * 60 * 1000; // retry sooner after a failure
 let cache = { at: 0, result: null };
 
@@ -32,9 +32,12 @@ async function getFromPublicCalendar() {
       .map(e => ({
         title: e.title || '(untitled)',
         country: e.country || '',
+        date: e.date || null,
         forecast: e.forecast || null,
-        previous: e.previous || null
-      }));
+        previous: e.previous || null,
+        actual: e.actual || null
+      }))
+      .sort((a, b) => (a.date && b.date ? new Date(a.date) - new Date(b.date) : 0));
 
     return { available: true, data: highImpact };
   } catch (err) {

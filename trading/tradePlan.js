@@ -5,7 +5,8 @@ function summarizeNews(news) {
     .slice(0, 5)
     .map(n => {
       if (n.country !== undefined) {
-        return `${n.country} — ${n.title} (forecast: ${n.forecast ?? 'n/a'}, previous: ${n.previous ?? 'n/a'})`;
+        const when = n.date ? new Date(n.date).toISOString() : 'time unknown';
+        return `${n.country} — ${n.title} (${when}) — forecast: ${n.forecast ?? 'n/a'}, previous: ${n.previous ?? 'n/a'}, actual: ${n.actual ?? 'not released yet'}`;
       }
       return `${n.title}${n.summary ? ' — ' + n.summary : ''}`;
     })
