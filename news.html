@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DEEPSEA · NEWS INTELLIGENCE</title>
+<title>DEEPSEA · NEWS ROOM</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg: #060a13;
+    --bg: #05070f;
     --panel: #0b1220;
     --panel-2: #0d1626;
     --border: #1a2740;
@@ -33,17 +33,19 @@
   body{
     margin:0;
     background:
-      radial-gradient(1100px 560px at 15% -8%, rgba(53,199,255,.08), transparent 60%),
-      radial-gradient(900px 500px at 100% 0%, rgba(139,123,255,.07), transparent 55%),
+      radial-gradient(1100px 560px at 15% -8%, rgba(53,199,255,.09), transparent 60%),
+      radial-gradient(900px 500px at 100% 0%, rgba(139,123,255,.08), transparent 55%),
+      radial-gradient(700px 420px at 50% 100%, rgba(255,182,72,.05), transparent 60%),
       var(--bg);
     color:var(--text);
     font-family:'Inter', system-ui, sans-serif;
-    padding:22px 16px 48px;
+    padding:22px 16px 70px;
+    overflow-x:hidden;
   }
   h1,h2,h3{font-family:'Chakra Petch', 'Inter', sans-serif;}
   .mono{font-family:'JetBrains Mono', ui-monospace, monospace; font-variant-numeric:tabular-nums;}
 
-  .wrap{max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:14px;}
+  .wrap{max-width:1360px;margin:0 auto;display:flex;flex-direction:column;gap:16px;position:relative;z-index:2;}
 
   .topbar{
     display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;
@@ -63,7 +65,9 @@
     background:conic-gradient(from 220deg, var(--amber), var(--accent), var(--amber));
     display:flex;align-items:center;justify-content:center;
     box-shadow:0 0 22px -4px var(--amber);
+    animation: markSpin 8s linear infinite;
   }
+  @keyframes markSpin{ to{ filter:hue-rotate(360deg); } }
   .brand-mark svg{width:20px;height:20px;}
   .brand-text h1{font-size:16px;font-weight:700;letter-spacing:.06em;margin:0;color:#eef4ff;}
   .brand-text .sub{font-size:10.5px;color:var(--text-dim);letter-spacing:.14em;text-transform:uppercase;margin-top:2px;}
@@ -76,52 +80,142 @@
   .notify-btn{font-size:11px;font-weight:700;letter-spacing:.04em;padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text-dim);cursor:pointer;}
   .notify-btn.on{color:var(--bull);border-color:rgba(47,219,150,.35);background:var(--bull-soft);}
 
+  /* ---- HUD summary strip ---- */
   .summary-row{display:flex;gap:14px;flex-wrap:wrap;}
   .summary-card{
-    flex:1;min-width:160px;
-    background:linear-gradient(180deg, var(--panel-2), var(--panel));
+    flex:1;min-width:150px;
+    background:linear-gradient(160deg, var(--panel-2), var(--panel));
     border:1px solid var(--border);border-radius:14px;padding:14px 16px;box-shadow:var(--shadow);
+    position:relative; overflow:hidden;
+  }
+  .summary-card::after{
+    content:""; position:absolute; inset:auto 0 0 0; height:2px;
+    background:linear-gradient(90deg, transparent, var(--accent), transparent);
+    opacity:.5;
   }
   .summary-card .k{font-size:10px;color:var(--text-faint);letter-spacing:.1em;text-transform:uppercase;}
   .summary-card .v{font-size:22px;font-weight:700;color:#eef4ff;margin-top:4px;}
 
-  .panel{
-    background:linear-gradient(180deg, var(--panel-2), var(--panel));
-    border:1px solid var(--border);border-radius:14px;padding:18px;
-    box-shadow:var(--shadow);position:relative;min-width:0;
-  }
-  .panel-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:8px;flex-wrap:wrap;}
+  .panel-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;gap:8px;flex-wrap:wrap;}
   .panel-title{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--text-dim);}
-  .panel-title .dot{width:7px;height:7px;border-radius:50%;flex:none;background:var(--amber);}
+  .panel-title .dot{width:7px;height:7px;border-radius:50%;flex:none;background:var(--amber);box-shadow:0 0 8px var(--amber);}
   .panel-note{font-size:10.5px;color:var(--text-faint);}
 
-  .empty-state{padding:32px 12px;text-align:center;color:var(--text-dim);font-size:13px;}
+  .empty-state{padding:60px 12px;text-align:center;color:var(--text-dim);font-size:13px;}
 
-  table.cal-table{width:100%;border-collapse:collapse;font-size:12.5px;}
-  .cal-table th{text-align:left;color:var(--text-faint);font-weight:600;letter-spacing:.04em;text-transform:uppercase;font-size:9.5px;padding:0 10px 10px 0;}
-  .cal-table td{padding:10px 10px 10px 0;border-top:1px solid var(--border-soft);color:var(--text-dim);vertical-align:top;}
-  .cal-table td.title{color:var(--text);font-weight:600;}
-  .cal-table td.actual{font-weight:700;}
-  .cal-table td.actual.released{color:var(--bull);}
-  .cal-table tr.flash{animation:calFlash 2.5s ease-out 1;}
-  @keyframes calFlash{0%{background:rgba(53,199,255,.22);}100%{background:transparent;}}
+  /* ---- The 3D holographic stage ---- */
+  .stage{
+    position:relative;
+    perspective:1500px;
+    padding:26px 4px 56px;
+    min-height:220px;
+  }
+  .floor{
+    position:absolute; left:0; right:0; bottom:-10px; height:260px;
+    background-image:
+      linear-gradient(rgba(53,199,255,.16) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(53,199,255,.16) 1px, transparent 1px);
+    background-size:46px 46px;
+    transform:rotateX(78deg);
+    transform-origin:bottom center;
+    -webkit-mask-image:linear-gradient(to top, black, transparent 85%);
+    mask-image:linear-gradient(to top, black, transparent 85%);
+    opacity:.4;
+    pointer-events:none;
+    animation:floorDrift 6s linear infinite;
+  }
+  @keyframes floorDrift{ from{background-position:0 0, 0 0;} to{background-position:0 46px, 46px 0;} }
 
-  .impact-cell{display:flex;flex-direction:column;gap:6px;min-width:220px;}
-  .impact-badge{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;padding:4px 8px;border-radius:7px;width:fit-content;}
+  .cards-grid{
+    position:relative; z-index:2;
+    display:grid; grid-template-columns:repeat(auto-fill, minmax(268px, 1fr)); gap:26px;
+  }
+
+  .event-card{
+    position:relative;
+    background:linear-gradient(160deg, rgba(15,25,44,.92), rgba(9,15,27,.9));
+    border:1px solid var(--border);
+    border-radius:16px;
+    padding:16px 18px 18px;
+    transform-style:preserve-3d;
+    transform:translateZ(0) rotateX(3deg);
+    box-shadow:0 22px 40px -22px rgba(0,0,0,.75), inset 0 1px 0 rgba(255,255,255,.03);
+    transition:box-shadow .25s ease, border-color .25s ease;
+    animation:cardFloat 5.5s ease-in-out infinite;
+    will-change:transform;
+  }
+  .event-card:hover{ animation-play-state:paused; border-color:rgba(53,199,255,.4); }
+  @keyframes cardFloat{
+    0%,100%{ transform:translateZ(0) translateY(0) rotateX(3deg); }
+    50%{ transform:translateZ(8px) translateY(-6px) rotateX(2deg); }
+  }
+
+  .event-card.awaiting{ border-color:rgba(255,182,72,.3); }
+  .event-card.released{ border-color:rgba(47,219,150,.28); }
+
+  .ec-glow{
+    position:absolute; inset:-1px; border-radius:17px; z-index:-1;
+    background:radial-gradient(120px 80px at 20% 0%, rgba(53,199,255,.14), transparent 70%);
+    opacity:0; transition:opacity .25s ease;
+  }
+  .event-card:hover .ec-glow{ opacity:1; }
+
+  .event-card.flash::before{
+    content:""; position:absolute; inset:-2px; border-radius:18px;
+    border:2px solid var(--accent);
+    animation:pingRing 1.3s ease-out 2;
+    pointer-events:none;
+  }
+  @keyframes pingRing{ 0%{ opacity:1; transform:scale(1); } 100%{ opacity:0; transform:scale(1.12); } }
+
+  .ec-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+  .ec-time{
+    font-family:'JetBrains Mono',monospace; font-size:19px; font-weight:700; color:#eef4ff;
+    text-shadow:0 0 14px rgba(53,199,255,.35);
+  }
+  .ec-flag{
+    font-family:'JetBrains Mono',monospace; font-size:10.5px; font-weight:700; letter-spacing:.06em;
+    padding:3px 8px; border-radius:6px; background:var(--violet-soft); color:var(--violet);
+  }
+
+  .ec-title{font-size:13px;font-weight:600;color:var(--text);line-height:1.35;margin-bottom:12px;min-height:34px;}
+
+  .ec-stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;}
+  .ec-stat{background:rgba(0,0,0,.22);border:1px solid var(--border-soft);border-radius:9px;padding:6px 8px;text-align:center;}
+  .ec-stat .k{font-size:8.5px;color:var(--text-faint);letter-spacing:.08em;text-transform:uppercase;}
+  .ec-stat .v{font-family:'JetBrains Mono',monospace;font-size:12.5px;font-weight:700;color:var(--text-dim);margin-top:2px;}
+  .ec-stat.actual .v{color:var(--text-faint);}
+  .ec-stat.actual.released{background:rgba(47,219,150,.08);border-color:rgba(47,219,150,.3);}
+  .ec-stat.actual.released .v{color:var(--bull);}
+  .ec-stat.actual.awaiting .v{
+    color:var(--amber); animation:pulseText 1.6s ease-in-out infinite;
+  }
+  @keyframes pulseText{ 0%,100%{opacity:.55;} 50%{opacity:1;} }
+
+  .ec-status{
+    display:flex; align-items:center; gap:6px; font-size:9.5px; letter-spacing:.06em; text-transform:uppercase;
+    color:var(--text-faint); margin-bottom:10px;
+  }
+  .ec-status .sd{width:6px;height:6px;border-radius:50%;flex:none;}
+  .ec-status.awaiting .sd{background:var(--amber);box-shadow:0 0 8px var(--amber);animation:blinkDot 1.4s ease-in-out infinite;}
+  .ec-status.released .sd{background:var(--bull);box-shadow:0 0 8px var(--bull);}
+  @keyframes blinkDot{ 0%,100%{opacity:1;} 50%{opacity:.25;} }
+
+  .ec-impact{display:flex;flex-direction:column;gap:6px;}
+  .impact-badge{display:inline-flex;align-items:center;gap:6px;font-size:10.5px;font-weight:600;padding:4px 8px;border-radius:7px;width:fit-content;}
   .impact-badge .sym{font-family:'JetBrains Mono',monospace;font-weight:700;}
   .impact-badge.bullish{background:var(--bull-soft);color:var(--bull);}
   .impact-badge.bearish{background:var(--bear-soft);color:var(--bear);}
   .impact-badge.neutral{background:rgba(118,136,168,.16);color:#9db0cc;}
   .impact-badge.pending{background:var(--amber-soft);color:var(--amber);}
-  .impact-none{font-size:11px;color:var(--text-faint);font-style:italic;}
-  .impact-analyzing{font-size:11px;color:var(--text-faint);}
+  .impact-none{font-size:10.5px;color:var(--text-faint);font-style:italic;}
+  .impact-analyzing{font-size:10.5px;color:var(--text-faint);}
 
-  @media (max-width:760px){
-    .cal-table thead{display:none;}
-    .cal-table, .cal-table tbody, .cal-table tr, .cal-table td{display:block;width:100%;}
-    .cal-table tr{border-top:1px solid var(--border-soft);padding:10px 0;}
-    .cal-table td{border-top:none;padding:2px 0;}
-    .cal-table td:before{content:attr(data-label);display:block;font-size:9px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px;}
+  @media (max-width:600px){
+    .stage{ perspective:none; padding:14px 0 30px; }
+    .floor{ display:none; }
+    .event-card{ animation:none; transform:none; }
+    .event-card:hover{ transform:none; }
   }
 </style>
 </head>
@@ -135,7 +229,7 @@
         <svg viewBox="0 0 24 24" fill="none"><rect x="4" y="4" width="16" height="16" rx="2" stroke="#04121c" stroke-width="2"/><path d="M8 9h8M8 13h8M8 17h5" stroke="#04121c" stroke-width="2" stroke-linecap="round"/></svg>
       </div>
       <div class="brand-text">
-        <h1>DEEPSEA · NEWS INTELLIGENCE</h1>
+        <h1>DEEPSEA · NEWS ROOM</h1>
         <div class="sub">Real calendar · AI impact research</div>
       </div>
     </div>
@@ -166,11 +260,13 @@
     </div>
   </div>
 
-  <div class="panel">
-    <div class="panel-head">
-      <div class="panel-title"><span class="dot"></span>Today's Economic Calendar (IST)</div>
-      <div class="panel-note">Real Forex Factory data · AI reasons over it for likely instrument impact, never invents the numbers</div>
-    </div>
+  <div class="panel-head">
+    <div class="panel-title"><span class="dot"></span>Today's Economic Calendar (IST)</div>
+    <div class="panel-note">Real Forex Factory data · AI reasons over it for likely instrument impact, never invents the numbers</div>
+  </div>
+
+  <div class="stage">
+    <div class="floor"></div>
     <div id="calendarWrap"><div class="empty-state">Loading…</div></div>
   </div>
 
@@ -196,7 +292,7 @@
     if (!dateStr) return '—';
     const d = new Date(dateStr);
     if (isNaN(d.getTime())) return '—';
-    return d.toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
+    return d.toLocaleString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
   }
 
   function notifyRelease(item){
@@ -223,7 +319,7 @@
 
   function renderImpact(impact){
     const wrap = document.createElement('div');
-    wrap.className = 'impact-cell';
+    wrap.className = 'ec-impact';
     if (!impact || !Array.isArray(impact.affects)) {
       const span = document.createElement('span');
       span.className = 'impact-analyzing';
@@ -248,6 +344,61 @@
       wrap.appendChild(badge);
     });
     return wrap;
+  }
+
+  // Subtle mouse-follow tilt on hover — pauses the idle float animation
+  // (see .event-card:hover in CSS) so the two transforms never fight.
+  function attachTilt(card){
+    card.addEventListener('mousemove', (e) => {
+      const rect = card.getBoundingClientRect();
+      const px = (e.clientX - rect.left) / rect.width;
+      const py = (e.clientY - rect.top) / rect.height;
+      const rotateY = (px - 0.5) * 14;
+      const rotateX = (0.5 - py) * 14;
+      card.style.transform = `translateZ(26px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale(1.03)`;
+    });
+    card.addEventListener('mouseleave', () => {
+      card.style.transform = '';
+    });
+  }
+
+  function buildEventCard(item, index){
+    const isReleased = item.actual != null;
+    const card = document.createElement('div');
+    card.className = 'event-card ' + (isReleased ? 'released' : 'awaiting');
+    card.style.animationDelay = (-(index % 6) * 0.9) + 's';
+
+    const glow = document.createElement('div');
+    glow.className = 'ec-glow';
+    card.appendChild(glow);
+
+    const top = document.createElement('div');
+    top.className = 'ec-top';
+    top.innerHTML = `<span class="ec-time mono">${fmtEventTime(item.date)}</span><span class="ec-flag">${item.country || '—'}</span>`;
+    card.appendChild(top);
+
+    const title = document.createElement('div');
+    title.className = 'ec-title';
+    title.textContent = item.title;
+    card.appendChild(title);
+
+    const status = document.createElement('div');
+    status.className = 'ec-status ' + (isReleased ? 'released' : 'awaiting');
+    status.innerHTML = `<span class="sd"></span>${isReleased ? 'Result received' : 'Awaiting release'}`;
+    card.appendChild(status);
+
+    const stats = document.createElement('div');
+    stats.className = 'ec-stats';
+    stats.innerHTML = `
+      <div class="ec-stat"><div class="k">Forecast</div><div class="v">${item.forecast ?? '—'}</div></div>
+      <div class="ec-stat"><div class="k">Previous</div><div class="v">${item.previous ?? '—'}</div></div>
+      <div class="ec-stat actual ${isReleased ? 'released' : 'awaiting'}"><div class="k">Actual</div><div class="v">${isReleased ? item.actual : '···'}</div></div>
+    `;
+    card.appendChild(stats);
+
+    card.appendChild(renderImpact(item.impact));
+    attachTilt(card);
+    return card;
   }
 
   function renderCalendar(news){
@@ -276,51 +427,27 @@
     sumReleased.textContent = released;
     sumPending.textContent = news.data.length - released;
 
-    const table = document.createElement('table');
-    table.className = 'cal-table';
-    table.innerHTML = `<thead><tr><th>Time</th><th>Currency</th><th>Event</th><th>Forecast</th><th>Previous</th><th>Actual</th><th>AI Impact Read</th></tr></thead><tbody></tbody>`;
-    const tbody = table.querySelector('tbody');
+    const grid = document.createElement('div');
+    grid.className = 'cards-grid';
 
-    news.data.forEach(item => {
+    news.data.forEach((item, index) => {
       const key = eventKey(item);
       const isKnown = lastActualByKey.has(key);
       const prevActual = lastActualByKey.get(key);
       const justReleased = isKnown && prevActual == null && item.actual != null;
 
-      const row = document.createElement('tr');
+      const card = buildEventCard(item, index);
       if (justReleased) {
-        row.className = 'flash';
+        card.classList.add('flash');
         notifyRelease(item);
       }
+      grid.appendChild(card);
 
-      const tds = [
-        ['Time', fmtEventTime(item.date)],
-        ['Currency', item.country || '—'],
-        ['Event', item.title],
-        ['Forecast', item.forecast ?? '—'],
-        ['Previous', item.previous ?? '—'],
-        ['Actual', item.actual ?? '—']
-      ];
-      tds.forEach(([label, value], i) => {
-        const td = document.createElement('td');
-        td.setAttribute('data-label', label);
-        if (i === 2) td.className = 'title';
-        if (i === 5) td.className = 'actual' + (item.actual != null ? ' released' : '');
-        td.textContent = value;
-        row.appendChild(td);
-      });
-
-      const impactTd = document.createElement('td');
-      impactTd.setAttribute('data-label', 'AI Impact Read');
-      impactTd.appendChild(renderImpact(item.impact));
-      row.appendChild(impactTd);
-
-      tbody.appendChild(row);
       lastActualByKey.set(key, item.actual ?? null);
     });
 
     wrap.innerHTML = '';
-    wrap.appendChild(table);
+    wrap.appendChild(grid);
   }
 
   async function loadNewsDashboard(){
