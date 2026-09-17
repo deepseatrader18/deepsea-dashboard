@@ -30,14 +30,18 @@ function istDateString(d) {
 // rarely even hits its own throttle.
 const RAW_THROTTLE_SUCCESS_MS = 60 * 1000;
 const RAW_FAILURE_BASE_MS = 2 * 60 * 1000;
-const RAW_FAILURE_MAX_MS = 20 * 60 * 1000;
-let rawCache = { at: 0, result: null };
+const RAW_FAILURE_MAX_MS = 30 * 60 * 1000;
+let rawCache = { at: 0, result: null, backoffMs: RAW_FAILURE_BASE_MS };
 let rawConsecutiveFailures = 0;
 let rawInFlight = null;
 
-function currentFailureBackoffMs() {
-  const backoff = RAW_FAILURE_BASE_MS * Math.pow(2, Math.max(0, rawConsecutiveFailures - 1));
-  return Math.min(backoff, RAW_FAILURE_MAX_MS);
+function parseRetryAfterMs(header) {
+  if (!header) return null;
+  const seconds = Number(header);
+  if (!Number.isNaN(seconds)) return seconds * 1000;
+  const dateMs = Date.parse(header);
+  if (!Number.isNaN(dateMs)) return Math.max(0, dateMs - Date.now());
+  return null;
 }
 
 async function fetchRawCalendarNow() {
@@ -48,19 +52,24 @@ async function fetchRawCalendarNow() {
     });
     if (!res.ok) {
       rawConsecutiveFailures++;
-      const retryAfter = res.headers.get('retry-after');
+      const retryAfterMs = parseRetryAfterMs(res.headers.get('retry-after'));
+      // The feed's own Retry-After is authoritative when it sends one — our
+      // exponential backoff is just a fallback for when it doesn't. Either
+      // way, never wait less than the base backoff or more than the cap.
+      const exponential = RAW_FAILURE_BASE_MS * Math.pow(2, Math.max(0, rawConsecutiveFailures - 1));
+      const backoffMs = Math.min(Math.max(retryAfterMs || 0, exponential), RAW_FAILURE_MAX_MS);
       console.error(
         `Forex Factory public calendar fetch failed: http ${res.status}` +
-          (retryAfter ? ` (retry-after: ${retryAfter}s)` : '') +
-          ` — backing off ${Math.round(currentFailureBackoffMs() / 1000)}s (consecutive failures: ${rawConsecutiveFailures})`
+          (retryAfterMs ? ` (feed asked to retry-after ${Math.round(retryAfterMs / 1000)}s)` : '') +
+          ` — backing off ${Math.round(backoffMs / 1000)}s (consecutive failures: ${rawConsecutiveFailures})`
       );
-      return { available: false, reason: `http ${res.status}` };
+      return { available: false, reason: `http ${res.status}`, backoffMs };
     }
 
     const events = await res.json();
     if (!Array.isArray(events)) {
       rawConsecutiveFailures++;
-      return { available: false, reason: 'unexpected response shape' };
+      return { available: false, reason: 'unexpected response shape', backoffMs: RAW_FAILURE_BASE_MS };
     }
 
     rawConsecutiveFailures = 0;
@@ -79,20 +88,20 @@ async function fetchRawCalendarNow() {
   } catch (err) {
     rawConsecutiveFailures++;
     console.error('Forex Factory public calendar fetch failed:', err.message);
-    return { available: false, reason: err.message };
+    return { available: false, reason: err.message, backoffMs: RAW_FAILURE_BASE_MS };
   }
 }
 
 async function fetchRawCalendarThrottled() {
   const now = Date.now();
-  const ttl = rawCache.result && rawCache.result.available ? RAW_THROTTLE_SUCCESS_MS : currentFailureBackoffMs();
+  const ttl = rawCache.result && rawCache.result.available ? RAW_THROTTLE_SUCCESS_MS : rawCache.backoffMs;
   if (rawCache.result && now - rawCache.at < ttl) {
     return rawCache.result;
   }
   if (rawInFlight) return rawInFlight; // concurrent callers share one request instead of firing their own
 
   rawInFlight = fetchRawCalendarNow().then(result => {
-    rawCache = { at: Date.now(), result };
+    rawCache = { at: Date.now(), result, backoffMs: result.backoffMs || RAW_FAILURE_BASE_MS };
     rawInFlight = null;
     return result;
   });
@@ -332,11 +341,9 @@ function eventKey(item) {
 
 let dailySnapshot = { day: null, events: [] };
 let scheduledTimers = [];
-let dailyFetchBlockedUntil = 0;
 
 const EVENT_CHECK_OFFSETS_MS = [0, 2 * 60 * 1000, 5 * 60 * 1000, 10 * 60 * 1000];
 const STALE_CHECKPOINT_MS = 40 * 60 * 1000; // don't bother firing a checkpoint this far after it was due
-const DAILY_FETCH_RETRY_MS = 15 * 60 * 1000; // if the once-a-day fetch itself fails, wait this long before retrying it
 
 async function refreshEventActual(key) {
   const existing = dailySnapshot.events.find(e => eventKey(e) === key);
@@ -375,14 +382,13 @@ async function ensureDailySnapshot() {
     return { available: true, data: dailySnapshot.events };
   }
 
-  const now = Date.now();
-  if (now < dailyFetchBlockedUntil) {
-    return { available: false, reason: 'calendar feed temporarily unavailable, retrying automatically' };
-  }
-
+  // fetchRawCalendarThrottled is the single source of truth for backoff
+  // timing (it already honors the feed's own Retry-After header, or falls
+  // back to exponential backoff) — no separate gate needed here. While it's
+  // in a backoff window this just returns the cached failure instantly,
+  // without another network call.
   const fresh = await fetchRawCalendarThrottled();
   if (!fresh.available) {
-    dailyFetchBlockedUntil = now + DAILY_FETCH_RETRY_MS;
     return { available: false, reason: fresh.reason };
   }
 
