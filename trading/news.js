@@ -11,13 +11,16 @@ const CACHE_TTL_SUCCESS_MS = 3 * 60 * 1000; // the user wants results to show up
 const CACHE_TTL_FAILURE_MS = 2 * 60 * 1000; // retry sooner after a failure
 let cache = { at: 0, result: null };
 
-// The Economic Calendar panel is used for real news trading, so it is kept
-// on its own much shorter cache than the general news-context cache above,
-// and it NEVER falls back to AI-generated text — only the real structured
-// feed. If the feed is down, the panel says so instead of showing a guess.
-const CALENDAR_CACHE_TTL_SUCCESS_MS = 10 * 1000;
-const CALENDAR_CACHE_TTL_FAILURE_MS = 15 * 1000;
-let calendarCache = { at: 0, result: null };
+// The raw calendar feed is hit from two independent places (the general news
+// context below, and the Economic Calendar panel/dashboard) — without a
+// SHARED cache underneath both, they each poll the upstream feed on their
+// own schedule and the combined rate gets our IP 429'd by the free feed, as
+// happened in production. This is the single choke point every consumer of
+// the public calendar goes through, so the feed is only actually fetched
+// once per TTL window no matter how many features read it.
+const RAW_CALENDAR_CACHE_TTL_MS = 30 * 1000;
+const RAW_CALENDAR_FAILURE_TTL_MS = 3 * 60 * 1000; // back off hard on 429 so we stop digging the hole deeper
+let rawCalendarCache = { at: 0, result: null };
 
 function istDateString(d) {
   return new Intl.DateTimeFormat('en-CA', {
@@ -31,7 +34,17 @@ function istDateString(d) {
 // Free, keyless economic calendar feed — the primary source, since it has
 // worked reliably in practice (unlike forexfactory.com's own site, which
 // blocks requests from cloud/datacenter IPs the same way Yahoo Finance does).
-async function getFromPublicCalendar() {
+async function fetchRawCalendar() {
+  const now = Date.now();
+  const ttl =
+    rawCalendarCache.result && rawCalendarCache.result.available
+      ? RAW_CALENDAR_CACHE_TTL_MS
+      : RAW_CALENDAR_FAILURE_TTL_MS;
+  if (rawCalendarCache.result && now - rawCalendarCache.at < ttl) {
+    return rawCalendarCache.result;
+  }
+
+  let result;
   try {
     const res = await fetch(FF_CALENDAR_URL, {
       signal: AbortSignal.timeout(8000),
@@ -39,28 +52,37 @@ async function getFromPublicCalendar() {
     });
     if (!res.ok) {
       console.error(`Forex Factory public calendar fetch failed: http ${res.status}`);
-      return { available: false, reason: `http ${res.status}` };
+      result = { available: false, reason: `http ${res.status}` };
+    } else {
+      const events = await res.json();
+      if (!Array.isArray(events)) {
+        result = { available: false, reason: 'unexpected response shape' };
+      } else {
+        const highImpact = events
+          .filter(e => e && String(e.impact).toLowerCase() === 'high')
+          .map(e => ({
+            title: e.title || '(untitled)',
+            country: e.country || '',
+            date: e.date || null,
+            forecast: e.forecast || null,
+            previous: e.previous || null,
+            actual: e.actual || null
+          }))
+          .sort((a, b) => (a.date && b.date ? new Date(a.date) - new Date(b.date) : 0));
+        result = { available: true, data: highImpact };
+      }
     }
-    const events = await res.json();
-    if (!Array.isArray(events)) return { available: false, reason: 'unexpected response shape' };
-
-    const highImpact = events
-      .filter(e => e && String(e.impact).toLowerCase() === 'high')
-      .map(e => ({
-        title: e.title || '(untitled)',
-        country: e.country || '',
-        date: e.date || null,
-        forecast: e.forecast || null,
-        previous: e.previous || null,
-        actual: e.actual || null
-      }))
-      .sort((a, b) => (a.date && b.date ? new Date(a.date) - new Date(b.date) : 0));
-
-    return { available: true, data: highImpact };
   } catch (err) {
     console.error('Forex Factory public calendar fetch failed:', err.message);
-    return { available: false, reason: err.message };
+    result = { available: false, reason: err.message };
   }
+
+  rawCalendarCache = { at: now, result };
+  return result;
+}
+
+async function getFromPublicCalendar() {
+  return fetchRawCalendar();
 }
 
 // Best-effort direct scrape of the page the user actually looks at. Render's
@@ -279,29 +301,17 @@ async function getForexFactoryNews(env) {
 // have no time/actual fields anyway) and never the AI-search/AI-text
 // fallbacks used for chat reasoning. Filtered to events dated "today" in
 // IST, so it naturally rolls over to the next day's calendar at midnight IST
-// on its own, without needing any separate scheduled job.
-async function fetchEconomicCalendarToday() {
-  const calendar = await getFromPublicCalendar();
+// on its own, without needing any separate scheduled job. Reads through the
+// same shared raw-calendar cache as getForexFactoryNews, so polling this
+// frequently from the frontend never means an extra upstream fetch.
+async function getEconomicCalendar() {
+  const calendar = await fetchRawCalendar();
   if (!calendar.available) return calendar;
 
   const today = istDateString(new Date());
   const todaysEvents = calendar.data.filter(e => e.date && istDateString(new Date(e.date)) === today);
 
   return { available: true, data: todaysEvents };
-}
-
-async function getEconomicCalendar() {
-  const now = Date.now();
-  const ttl =
-    calendarCache.result && calendarCache.result.available
-      ? CALENDAR_CACHE_TTL_SUCCESS_MS
-      : CALENDAR_CACHE_TTL_FAILURE_MS;
-  if (calendarCache.result && now - calendarCache.at < ttl) {
-    return calendarCache.result;
-  }
-  const result = await fetchEconomicCalendarToday();
-  calendarCache = { at: now, result };
-  return result;
 }
 
 module.exports = { getForexFactoryNews, getEconomicCalendar };

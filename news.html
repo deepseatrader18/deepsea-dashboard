@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DEEPSEA · NEWS INTELLIGENCE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #060a13;
+    --panel: #0b1220;
+    --panel-2: #0d1626;
+    --border: #1a2740;
+    --border-soft: #141f36;
+    --text: #dce6f7;
+    --text-dim: #7688a8;
+    --text-faint: #4c5b78;
+    --accent: #35c7ff;
+    --accent-soft: rgba(53,199,255,.14);
+    --violet: #8b7bff;
+    --violet-soft: rgba(139,123,255,.14);
+    --bull: #2fdb96;
+    --bull-soft: rgba(47,219,150,.14);
+    --bear: #ff4d6d;
+    --bear-soft: rgba(255,77,109,.14);
+    --amber: #ffb648;
+    --amber-soft: rgba(255,182,72,.14);
+    --shadow: 0 1px 0 rgba(255,255,255,.02) inset, 0 12px 30px -18px rgba(0,0,0,.7);
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(1100px 560px at 15% -8%, rgba(53,199,255,.08), transparent 60%),
+      radial-gradient(900px 500px at 100% 0%, rgba(139,123,255,.07), transparent 55%),
+      var(--bg);
+    color:var(--text);
+    font-family:'Inter', system-ui, sans-serif;
+    padding:22px 16px 48px;
+  }
+  h1,h2,h3{font-family:'Chakra Petch', 'Inter', sans-serif;}
+  .mono{font-family:'JetBrains Mono', ui-monospace, monospace; font-variant-numeric:tabular-nums;}
+
+  .wrap{max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:14px;}
+
+  .topbar{
+    display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;
+    background:linear-gradient(180deg, var(--panel-2), var(--panel));
+    border:1px solid var(--border);border-radius:14px;
+    padding:16px 20px;box-shadow:var(--shadow);
+    position:relative;overflow:hidden;
+  }
+  .topbar::before{
+    content:"";position:absolute;inset:0 0 auto 0;height:2px;
+    background:linear-gradient(90deg, var(--amber), var(--accent) 55%, transparent);
+    opacity:.7;
+  }
+  .brand{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+  .brand-mark{
+    width:38px;height:38px;border-radius:10px;flex:none;
+    background:conic-gradient(from 220deg, var(--amber), var(--accent), var(--amber));
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 0 22px -4px var(--amber);
+  }
+  .brand-mark svg{width:20px;height:20px;}
+  .brand-text h1{font-size:16px;font-weight:700;letter-spacing:.06em;margin:0;color:#eef4ff;}
+  .brand-text .sub{font-size:10.5px;color:var(--text-dim);letter-spacing:.14em;text-transform:uppercase;margin-top:2px;}
+  .top-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .back-link{
+    font-size:11px; font-weight:600; letter-spacing:.05em; color:var(--text-dim);
+    text-decoration:none; border:1px solid var(--border); padding:6px 12px; border-radius:8px;
+  }
+  .clock{font-size:12px;color:var(--text-faint);}
+  .notify-btn{font-size:11px;font-weight:700;letter-spacing:.04em;padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text-dim);cursor:pointer;}
+  .notify-btn.on{color:var(--bull);border-color:rgba(47,219,150,.35);background:var(--bull-soft);}
+
+  .summary-row{display:flex;gap:14px;flex-wrap:wrap;}
+  .summary-card{
+    flex:1;min-width:160px;
+    background:linear-gradient(180deg, var(--panel-2), var(--panel));
+    border:1px solid var(--border);border-radius:14px;padding:14px 16px;box-shadow:var(--shadow);
+  }
+  .summary-card .k{font-size:10px;color:var(--text-faint);letter-spacing:.1em;text-transform:uppercase;}
+  .summary-card .v{font-size:22px;font-weight:700;color:#eef4ff;margin-top:4px;}
+
+  .panel{
+    background:linear-gradient(180deg, var(--panel-2), var(--panel));
+    border:1px solid var(--border);border-radius:14px;padding:18px;
+    box-shadow:var(--shadow);position:relative;min-width:0;
+  }
+  .panel-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:8px;flex-wrap:wrap;}
+  .panel-title{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--text-dim);}
+  .panel-title .dot{width:7px;height:7px;border-radius:50%;flex:none;background:var(--amber);}
+  .panel-note{font-size:10.5px;color:var(--text-faint);}
+
+  .empty-state{padding:32px 12px;text-align:center;color:var(--text-dim);font-size:13px;}
+
+  table.cal-table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  .cal-table th{text-align:left;color:var(--text-faint);font-weight:600;letter-spacing:.04em;text-transform:uppercase;font-size:9.5px;padding:0 10px 10px 0;}
+  .cal-table td{padding:10px 10px 10px 0;border-top:1px solid var(--border-soft);color:var(--text-dim);vertical-align:top;}
+  .cal-table td.title{color:var(--text);font-weight:600;}
+  .cal-table td.actual{font-weight:700;}
+  .cal-table td.actual.released{color:var(--bull);}
+  .cal-table tr.flash{animation:calFlash 2.5s ease-out 1;}
+  @keyframes calFlash{0%{background:rgba(53,199,255,.22);}100%{background:transparent;}}
+
+  .impact-cell{display:flex;flex-direction:column;gap:6px;min-width:220px;}
+  .impact-badge{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;padding:4px 8px;border-radius:7px;width:fit-content;}
+  .impact-badge .sym{font-family:'JetBrains Mono',monospace;font-weight:700;}
+  .impact-badge.bullish{background:var(--bull-soft);color:var(--bull);}
+  .impact-badge.bearish{background:var(--bear-soft);color:var(--bear);}
+  .impact-badge.neutral{background:rgba(118,136,168,.16);color:#9db0cc;}
+  .impact-badge.pending{background:var(--amber-soft);color:var(--amber);}
+  .impact-none{font-size:11px;color:var(--text-faint);font-style:italic;}
+  .impact-analyzing{font-size:11px;color:var(--text-faint);}
+
+  @media (max-width:760px){
+    .cal-table thead{display:none;}
+    .cal-table, .cal-table tbody, .cal-table tr, .cal-table td{display:block;width:100%;}
+    .cal-table tr{border-top:1px solid var(--border-soft);padding:10px 0;}
+    .cal-table td{border-top:none;padding:2px 0;}
+    .cal-table td:before{content:attr(data-label);display:block;font-size:9px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px;}
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <div class="topbar">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg viewBox="0 0 24 24" fill="none"><rect x="4" y="4" width="16" height="16" rx="2" stroke="#04121c" stroke-width="2"/><path d="M8 9h8M8 13h8M8 17h5" stroke="#04121c" stroke-width="2" stroke-linecap="round"/></svg>
+      </div>
+      <div class="brand-text">
+        <h1>DEEPSEA · NEWS INTELLIGENCE</h1>
+        <div class="sub">Real calendar · AI impact research</div>
+      </div>
+    </div>
+    <div class="top-right">
+      <button class="notify-btn" id="notifyBtn">🔔 Notify me</button>
+      <span class="clock mono" id="hdrClock">—</span>
+      <a href="/trading" class="back-link">TRADING ROOM →</a>
+      <a href="/" class="back-link">← HUB</a>
+    </div>
+  </div>
+
+  <div class="summary-row">
+    <div class="summary-card">
+      <div class="k">Today's High-Impact Events</div>
+      <div class="v mono" id="sumTotal">—</div>
+    </div>
+    <div class="summary-card">
+      <div class="k">Released</div>
+      <div class="v mono" id="sumReleased">—</div>
+    </div>
+    <div class="summary-card">
+      <div class="k">Awaiting Release</div>
+      <div class="v mono" id="sumPending">—</div>
+    </div>
+    <div class="summary-card">
+      <div class="k">Last Refreshed</div>
+      <div class="v mono" id="sumRefreshed" style="font-size:14px;">—</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head">
+      <div class="panel-title"><span class="dot"></span>Today's Economic Calendar (IST)</div>
+      <div class="panel-note">Real Forex Factory data · AI reasons over it for likely instrument impact, never invents the numbers</div>
+    </div>
+    <div id="calendarWrap"><div class="empty-state">Loading…</div></div>
+  </div>
+
+</div>
+
+<script>
+  function tickClock(){
+    document.getElementById('hdrClock').textContent = new Date().toLocaleString('en-GB', {
+      day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+    });
+  }
+  tickClock();
+  setInterval(tickClock, 1000);
+
+  let notificationsEnabled = false;
+  const lastActualByKey = new Map();
+
+  function eventKey(item){
+    return item.country + '|' + item.title + '|' + (item.date || '');
+  }
+
+  function fmtEventTime(dateStr){
+    if (!dateStr) return '—';
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
+  }
+
+  function notifyRelease(item){
+    if (!notificationsEnabled || typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+    try {
+      new Notification(`${item.country} — ${item.title}`, {
+        body: `Actual: ${item.actual}  (Forecast: ${item.forecast ?? 'n/a'}, Previous: ${item.previous ?? 'n/a'})`,
+        tag: eventKey(item)
+      });
+    } catch (e) { /* Notification constructor can throw on some browsers/contexts; ignore */ }
+  }
+
+  document.getElementById('notifyBtn').addEventListener('click', async () => {
+    if (typeof Notification === 'undefined') {
+      alert('This browser does not support notifications.');
+      return;
+    }
+    const permission = await Notification.requestPermission();
+    notificationsEnabled = permission === 'granted';
+    const btn = document.getElementById('notifyBtn');
+    btn.classList.toggle('on', notificationsEnabled);
+    btn.textContent = notificationsEnabled ? '🔔 Notifications on' : '🔔 Notify me';
+  });
+
+  function renderImpact(impact){
+    const wrap = document.createElement('div');
+    wrap.className = 'impact-cell';
+    if (!impact || !Array.isArray(impact.affects)) {
+      const span = document.createElement('span');
+      span.className = 'impact-analyzing';
+      span.textContent = 'AI read pending…';
+      wrap.appendChild(span);
+      return wrap;
+    }
+    if (!impact.affects.length) {
+      const span = document.createElement('span');
+      span.className = 'impact-none';
+      span.textContent = 'No major pairs affected';
+      wrap.appendChild(span);
+      return wrap;
+    }
+    impact.affects.forEach(a => {
+      const dir = (a.direction || '').toLowerCase();
+      const cls = dir === 'bullish' ? 'bullish' : dir === 'bearish' ? 'bearish' : dir === 'awaiting release' ? 'pending' : 'neutral';
+      const badge = document.createElement('span');
+      badge.className = 'impact-badge ' + cls;
+      badge.title = a.reason || '';
+      badge.innerHTML = `<span class="sym">${a.symbol}</span>${(a.direction || '').toUpperCase()}`;
+      wrap.appendChild(badge);
+    });
+    return wrap;
+  }
+
+  function renderCalendar(news){
+    const wrap = document.getElementById('calendarWrap');
+    const sumTotal = document.getElementById('sumTotal');
+    const sumReleased = document.getElementById('sumReleased');
+    const sumPending = document.getElementById('sumPending');
+
+    if (!news.available) {
+      wrap.innerHTML = `<div class="empty-state">News calendar not available right now (${news.reason}).</div>`;
+      sumTotal.textContent = '—';
+      sumReleased.textContent = '—';
+      sumPending.textContent = '—';
+      return;
+    }
+    if (!news.data.length) {
+      wrap.innerHTML = '<div class="empty-state">No high-impact events scheduled for today.</div>';
+      sumTotal.textContent = '0';
+      sumReleased.textContent = '0';
+      sumPending.textContent = '0';
+      return;
+    }
+
+    const released = news.data.filter(e => e.actual != null).length;
+    sumTotal.textContent = news.data.length;
+    sumReleased.textContent = released;
+    sumPending.textContent = news.data.length - released;
+
+    const table = document.createElement('table');
+    table.className = 'cal-table';
+    table.innerHTML = `<thead><tr><th>Time</th><th>Currency</th><th>Event</th><th>Forecast</th><th>Previous</th><th>Actual</th><th>AI Impact Read</th></tr></thead><tbody></tbody>`;
+    const tbody = table.querySelector('tbody');
+
+    news.data.forEach(item => {
+      const key = eventKey(item);
+      const isKnown = lastActualByKey.has(key);
+      const prevActual = lastActualByKey.get(key);
+      const justReleased = isKnown && prevActual == null && item.actual != null;
+
+      const row = document.createElement('tr');
+      if (justReleased) {
+        row.className = 'flash';
+        notifyRelease(item);
+      }
+
+      const tds = [
+        ['Time', fmtEventTime(item.date)],
+        ['Currency', item.country || '—'],
+        ['Event', item.title],
+        ['Forecast', item.forecast ?? '—'],
+        ['Previous', item.previous ?? '—'],
+        ['Actual', item.actual ?? '—']
+      ];
+      tds.forEach(([label, value], i) => {
+        const td = document.createElement('td');
+        td.setAttribute('data-label', label);
+        if (i === 2) td.className = 'title';
+        if (i === 5) td.className = 'actual' + (item.actual != null ? ' released' : '');
+        td.textContent = value;
+        row.appendChild(td);
+      });
+
+      const impactTd = document.createElement('td');
+      impactTd.setAttribute('data-label', 'AI Impact Read');
+      impactTd.appendChild(renderImpact(item.impact));
+      row.appendChild(impactTd);
+
+      tbody.appendChild(row);
+      lastActualByKey.set(key, item.actual ?? null);
+    });
+
+    wrap.innerHTML = '';
+    wrap.appendChild(table);
+  }
+
+  async function loadNewsDashboard(){
+    try {
+      const res = await fetch('/api/news-dashboard');
+      const news = await res.json();
+      renderCalendar(news);
+      document.getElementById('sumRefreshed').textContent = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+    } catch (err) {
+      console.error('News dashboard fetch failed:', err);
+    }
+  }
+
+  loadNewsDashboard();
+  setInterval(loadNewsDashboard, 10000);
+</script>
+
+</body>
+</html>

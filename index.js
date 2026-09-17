@@ -4,6 +4,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { buildAgents, checkAllAgents } = require('./agents');
 const { getForexFactoryNews, getEconomicCalendar } = require('./trading/news');
+const { analyzeNewsImpact } = require('./trading/newsImpact');
 const { getTechnicalAnalysis } = require('./trading/technical');
 const { runTradingPipeline } = require('./trading/pipeline');
 const { sendTelegramAlert, formatTradeAlert } = require('./trading/telegramAlert');
@@ -130,6 +131,10 @@ app.get('/trading', requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, 'trading.html'));
 });
 
+app.get('/news', requireAuth, (req, res) => {
+  res.sendFile(path.join(__dirname, 'news.html'));
+});
+
 app.get('/api/test-telegram', requireAuth, async (req, res) => {
   if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
     return res.status(400).json({ ok: false, reason: 'TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not configured on the server' });
@@ -199,6 +204,18 @@ app.get('/api/status', requireAuth, async (req, res) => {
 app.get('/api/calendar', requireAuth, async (req, res) => {
   const calendar = await getEconomicCalendar();
   res.json(calendar);
+});
+
+// News Dashboard: same real calendar data as /api/calendar, plus an AI
+// research pass (trading/newsImpact.js) reasoning over which instruments
+// each real event is likely to move and why. The underlying event data is
+// always real; only the "affects" analysis is AI-generated, and it's
+// clearly presented as such on the page.
+app.get('/api/news-dashboard', requireAuth, async (req, res) => {
+  const calendar = await getEconomicCalendar();
+  if (!calendar.available) return res.json(calendar);
+  const data = await analyzeNewsImpact(ENV, calendar.data);
+  res.json({ available: true, data });
 });
 
 app.get('/api/nexus', requireAuth, async (req, res) => {
