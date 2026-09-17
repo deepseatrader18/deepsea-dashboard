@@ -139,8 +139,13 @@
   .planet.violet .orb svg{color:var(--violet);}
   .planet.violet:hover .orb{box-shadow:0 0 30px 4px rgba(139,123,255,.3); border-color:var(--violet);}
 
+  .planet.amber .orb{border-color:rgba(255,182,72,.5);}
+  .planet.amber .orb svg{color:#ffb648;}
+  .planet.amber:hover .orb{box-shadow:0 0 30px 4px rgba(255,182,72,.3); border-color:#ffb648;}
+
   #planet-trading{ transform:translate(calc(-50% - 190px), calc(-50% - 90px)); }
   #planet-assistant{ transform:translate(calc(-50% + 190px), calc(-50% + 90px)); }
+  #planet-news{ transform:translate(calc(-50% + 90px), calc(-50% - 190px)); }
 
   @media (max-width:720px){
     #stage{height:auto;}
@@ -186,6 +191,7 @@
       </defs>
       <path class="bridge-path" d="M 50 50 Q 32 34, 20 28" vector-effect="non-scaling-stroke"/>
       <path class="bridge-path" d="M 50 50 Q 68 66, 80 72" vector-effect="non-scaling-stroke"/>
+      <path class="bridge-path" d="M 50 50 Q 56 32, 62 15" vector-effect="non-scaling-stroke"/>
     </svg>
 
     <div class="orbit-ring r1"></div>
@@ -205,6 +211,14 @@
       </div>
       <div class="name">TRADING ROOM</div>
       <div class="sub">Chart · Risk · Signals</div>
+    </a>
+
+    <a href="/news" class="planet amber" id="planet-news">
+      <div class="orb">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>
+      </div>
+      <div class="name">NEWS ROOM</div>
+      <div class="sub">Calendar · AI Impact</div>
     </a>
 
     <a href="/assistant" class="planet violet" id="planet-assistant">

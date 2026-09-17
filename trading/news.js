@@ -19,8 +19,10 @@ let cache = { at: 0, result: null };
 // the public calendar goes through, so the feed is only actually fetched
 // once per TTL window no matter how many features read it.
 const RAW_CALENDAR_CACHE_TTL_MS = 30 * 1000;
-const RAW_CALENDAR_FAILURE_TTL_MS = 3 * 60 * 1000; // back off hard on 429 so we stop digging the hole deeper
+const RAW_CALENDAR_FAILURE_BASE_MS = 2 * 60 * 1000; // first backoff on failure
+const RAW_CALENDAR_FAILURE_MAX_MS = 20 * 60 * 1000; // cap so it still self-heals within the day
 let rawCalendarCache = { at: 0, result: null };
+let rawCalendarConsecutiveFailures = 0;
 
 function istDateString(d) {
   return new Intl.DateTimeFormat('en-CA', {
@@ -34,12 +36,19 @@ function istDateString(d) {
 // Free, keyless economic calendar feed — the primary source, since it has
 // worked reliably in practice (unlike forexfactory.com's own site, which
 // blocks requests from cloud/datacenter IPs the same way Yahoo Finance does).
+function currentFailureBackoffMs() {
+  // Doubles with each consecutive failure (2m, 4m, 8m, ... capped at 20m) so
+  // that if the feed is genuinely rate-limiting us, we back off harder
+  // instead of retrying every couple of minutes and extending the ban.
+  const backoff = RAW_CALENDAR_FAILURE_BASE_MS * Math.pow(2, Math.max(0, rawCalendarConsecutiveFailures - 1));
+  return Math.min(backoff, RAW_CALENDAR_FAILURE_MAX_MS);
+}
+
 async function fetchRawCalendar() {
   const now = Date.now();
-  const ttl =
-    rawCalendarCache.result && rawCalendarCache.result.available
-      ? RAW_CALENDAR_CACHE_TTL_MS
-      : RAW_CALENDAR_FAILURE_TTL_MS;
+  const ttl = rawCalendarCache.result && rawCalendarCache.result.available
+    ? RAW_CALENDAR_CACHE_TTL_MS
+    : currentFailureBackoffMs();
   if (rawCalendarCache.result && now - rawCalendarCache.at < ttl) {
     return rawCalendarCache.result;
   }
@@ -51,13 +60,21 @@ async function fetchRawCalendar() {
       headers: { 'User-Agent': BROWSER_USER_AGENT }
     });
     if (!res.ok) {
-      console.error(`Forex Factory public calendar fetch failed: http ${res.status}`);
+      rawCalendarConsecutiveFailures++;
+      const retryAfter = res.headers.get('retry-after');
+      console.error(
+        `Forex Factory public calendar fetch failed: http ${res.status}` +
+          (retryAfter ? ` (retry-after: ${retryAfter}s)` : '') +
+          ` — backing off ${Math.round(currentFailureBackoffMs() / 1000)}s (consecutive failures: ${rawCalendarConsecutiveFailures})`
+      );
       result = { available: false, reason: `http ${res.status}` };
     } else {
       const events = await res.json();
       if (!Array.isArray(events)) {
+        rawCalendarConsecutiveFailures++;
         result = { available: false, reason: 'unexpected response shape' };
       } else {
+        rawCalendarConsecutiveFailures = 0;
         const highImpact = events
           .filter(e => e && String(e.impact).toLowerCase() === 'high')
           .map(e => ({
@@ -73,6 +90,7 @@ async function fetchRawCalendar() {
       }
     }
   } catch (err) {
+    rawCalendarConsecutiveFailures++;
     console.error('Forex Factory public calendar fetch failed:', err.message);
     result = { available: false, reason: err.message };
   }
