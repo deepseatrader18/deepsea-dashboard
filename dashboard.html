@@ -93,6 +93,44 @@
   #clock{font-size:11px; color:var(--text-mid); letter-spacing:1px;}
   #logout-link{font-size:9px; letter-spacing:2px; color:var(--text-dim); border:1px solid rgba(143,168,189,0.3); padding:4px 10px;}
 
+  #help-btn{
+    width:26px; height:26px; border-radius:50%; flex:none; cursor:pointer;
+    background:transparent; border:1px solid rgba(143,168,189,0.3); color:var(--text-dim);
+    font-family:'Space Grotesk',sans-serif; font-size:12px; font-weight:700;
+    display:flex; align-items:center; justify-content:center;
+  }
+  #help-btn:hover{ color:var(--cyan); border-color:var(--cyan-dim); }
+
+  #help-overlay{
+    position:fixed; inset:0; z-index:50; display:none;
+    background:rgba(2,6,11,0.78); backdrop-filter:blur(3px);
+    align-items:center; justify-content:center; padding:24px;
+  }
+  #help-overlay.open{ display:flex; }
+  #help-modal{
+    width:min(640px, 100%); max-height:82vh; overflow-y:auto;
+    background:linear-gradient(180deg, rgba(13,22,38,0.98), rgba(9,15,27,0.98));
+    border:1px solid rgba(47,230,255,0.3); border-radius:14px;
+    box-shadow:0 0 60px -10px rgba(47,230,255,0.25), 0 30px 60px -20px rgba(0,0,0,0.8);
+    padding:22px 26px 26px;
+  }
+  #help-modal h2{
+    font-size:15px; letter-spacing:1px; color:var(--text-hi); margin-bottom:4px;
+    display:flex; align-items:center; justify-content:space-between;
+  }
+  #help-modal .sub{font-size:10.5px; color:var(--text-dim); letter-spacing:.5px; margin-bottom:16px;}
+  #help-close{
+    cursor:pointer; width:26px; height:26px; border-radius:50%; border:1px solid rgba(143,168,189,0.3);
+    color:var(--text-dim); background:transparent; font-size:14px; line-height:1;
+  }
+  #help-close:hover{ color:var(--danger); border-color:rgba(255,77,94,0.5); }
+  .help-group{margin-bottom:16px;}
+  .help-group h3{font-size:10px; letter-spacing:1.5px; color:var(--cyan); text-transform:uppercase; margin-bottom:8px;}
+  .help-cmd{display:flex; gap:10px; align-items:baseline; font-size:12px; color:var(--text-mid); padding:4px 0; border-top:1px solid rgba(143,168,189,0.08);}
+  .help-cmd:first-child{border-top:none;}
+  .help-cmd b{font-family:'JetBrains Mono'; color:var(--text-hi); font-weight:500; flex:0 0 auto;}
+  .help-cmd span{color:var(--text-dim); font-size:11px;}
+
   /* ---------- HUD panel frame ---------- */
   .hud-frame{
     position:relative;
@@ -351,7 +389,44 @@
           <div id="mic-status" class="mono">Starting mic...</div>
         </div>
         <div id="clock" class="mono">--:--:--</div>
+        <button id="help-btn" title="Voice command help">?</button>
         <a href="/logout" id="logout-link">LOGOUT</a>
+      </div>
+    </div>
+
+    <div id="help-overlay">
+      <div id="help-modal">
+        <h2>Voice Commands<button id="help-close" title="Close">✕</button></h2>
+        <div class="sub">Click the mic, or say a wake word first, then speak your command.</div>
+
+        <div class="help-group">
+          <h3>Wake Word</h3>
+          <div class="help-cmd"><b>"DeepSea" / "डीप सी"</b><span>say this first, then wait for "Ji Boss, boliye" before your command — or just click the mic button and speak directly.</span></div>
+        </div>
+
+        <div class="help-group">
+          <h3>Open a Website</h3>
+          <div class="help-cmd"><b>"YouTube खोलो"</b><span>opens YouTube</span></div>
+          <div class="help-cmd"><b>"Gmail खोलो"</b><span>opens Gmail</span></div>
+          <div class="help-cmd"><b>"WhatsApp खोलो"</b><span>opens WhatsApp Web</span></div>
+          <div class="help-cmd"><b>"Instagram खोलो"</b><span>opens Instagram</span></div>
+        </div>
+
+        <div class="help-group">
+          <h3>Home Laptop Control (needs desktop-assistant running)</h3>
+          <div class="help-cmd"><b>"Chrome/Notepad/Spotify/VS Code खोलो"</b><span>launches that app on your home laptop</span></div>
+          <div class="help-cmd"><b>"Gana/song sunao"</b><span>plays a song on YouTube</span></div>
+          <div class="help-cmd"><b>"Volume/mute/pause/next/previous"</b><span>media controls</span></div>
+          <div class="help-cmd"><b>"Lock / shutdown / restart / so jao"</b><span>system power commands — always asks "haan" to confirm first</span></div>
+          <div class="help-cmd"><b>"Screenshot lo" / "Type karo ..." / "Click karo"</b><span>basic system actions</span></div>
+        </div>
+
+        <div class="help-group">
+          <h3>Talk to DeepSea</h3>
+          <div class="help-cmd"><b>Trading questions</b><span>e.g. "gold mein trade plan karo" — real technical analysis + AI reasoning</span></div>
+          <div class="help-cmd"><b>Email questions</b><span>e.g. "koi naya mail aaya?" — reads your real Gmail inbox</span></div>
+          <div class="help-cmd"><b>Anything else</b><span>general conversation — she remembers recent context and things you've told her before</span></div>
+        </div>
       </div>
     </div>
 
@@ -726,6 +801,13 @@
   }
   pollVolumeAlerts();
   setInterval(pollVolumeAlerts, 30000);
+
+  const helpBtn = document.getElementById('help-btn');
+  const helpOverlay = document.getElementById('help-overlay');
+  const helpClose = document.getElementById('help-close');
+  helpBtn.addEventListener('click', () => helpOverlay.classList.add('open'));
+  helpClose.addEventListener('click', () => helpOverlay.classList.remove('open'));
+  helpOverlay.addEventListener('click', (e) => { if (e.target === helpOverlay) helpOverlay.classList.remove('open'); });
 
   const micBtn = document.getElementById('mic-btn');
   const micStatus = document.getElementById('mic-status');

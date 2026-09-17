@@ -9,6 +9,7 @@ const { getTechnicalAnalysis } = require('./trading/technical');
 const { runTradingPipeline } = require('./trading/pipeline');
 const { sendTelegramAlert, formatTradeAlert } = require('./trading/telegramAlert');
 const { recordTrade, checkOpenTrades, getTradeLog } = require('./trading/tradeJournal');
+const { loadMemory, saveRecent, saveSummary } = require('./memory');
 const { MsEdgeTTS, OUTPUT_FORMAT } = require('msedge-tts');
 const app = express();
 
@@ -310,14 +311,53 @@ app.get('/api/deep-analysis/:jobId', requireAuth, async (req, res) => {
   }
 });
 
+// Keeps DeepSea's running memory of the Boss up to date after every reply —
+// fired off without being awaited by the caller (see below) so it never
+// adds latency to the spoken/texted reply itself; it just needs to land in
+// Redis before the *next* message, not before this one is delivered.
+async function updateMemorySummary(env, oldSummary, userText, reply) {
+  try {
+    const prompt =
+      'You maintain a compact, ongoing memory file about "the Boss" for his AI companion DeepSea. ' +
+      `Current memory (empty if nothing remembered yet):\n${oldSummary || '(empty)'}\n\n` +
+      `New exchange:\nBoss: ${userText}\nDeepSea: ${reply}\n\n` +
+      "Update the memory to fold in any new lasting facts, preferences, tasks he asked to be remembered, or emotionally meaningful things he shared. " +
+      "Keep it compact (under 150 words), drop anything no longer relevant or that was just small talk, and don't repeat what's already captured. " +
+      'Respond with ONLY the updated memory text — no preamble, no labels, no markdown.';
+
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${env.GROQ_API_KEY}` },
+      body: JSON.stringify({
+        model: 'openai/gpt-oss-120b',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.2
+      }),
+      signal: AbortSignal.timeout(15000)
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      console.error('Memory summary update failed:', JSON.stringify(data));
+      return oldSummary;
+    }
+    return data.choices?.[0]?.message?.content?.trim() || oldSummary;
+  } catch (err) {
+    console.error('Memory summary update failed:', err.message);
+    return oldSummary;
+  }
+}
+
 // Shared by /api/chat (dashboard mic, spoken reply) and /api/bridge/chat
 // (WhatsApp bridge, texted reply) so both surfaces get the same DeepSea
-// persona and real trade-plan/Gmail context instead of two copies drifting
-// apart. `channel` only tweaks the one line about how the reply is consumed.
-async function buildDeepSeaReply(userText, channel = 'voice', history = []) {
+// persona, persistent memory, and real trade-plan/Gmail context instead of
+// two copies drifting apart. `channel` only tweaks the one line about how
+// the reply is consumed.
+async function buildDeepSeaReply(userText, channel = 'voice') {
   if (!GROQ_API_KEY) {
     throw new Error('GROQ_API_KEY not set on server');
   }
+
+  const memory = await loadMemory(ENV);
 
   let contextText = '';
 
@@ -356,6 +396,7 @@ async function buildDeepSeaReply(userText, channel = 'voice', history = []) {
     `${contextText} ` +
     "Stay warm and personal in tone, but don't invent or mix in unrelated factual data (trades, news, numbers) the user didn't ask about — feelings and personality are always welcome, made-up facts are not. " +
     "You can see the last few turns of this conversation below — use them for continuity (don't re-introduce yourself if you already just did, remember what he just told you), the way a real ongoing conversation would. " +
+    (memory.summary ? `Here is what you remember about the Boss from before this conversation — bring it up naturally when relevant, the way a real companion who remembers would: ${memory.summary} ` : '') +
     outputLine;
 
   // Groq (OpenAI-compatible endpoint) instead of Gemini — Gemini's free
@@ -378,7 +419,7 @@ async function buildDeepSeaReply(userText, channel = 'voice', history = []) {
         model: 'openai/gpt-oss-120b',
         messages: [
           { role: 'system', content: systemInstruction },
-          ...history,
+          ...memory.recent,
           { role: 'user', content: userText }
         ]
       })
@@ -392,13 +433,22 @@ async function buildDeepSeaReply(userText, channel = 'voice', history = []) {
     throw new Error('Groq API error');
   }
 
-  return (
+  const reply =
     (data.choices &&
       data.choices[0] &&
       data.choices[0].message &&
       data.choices[0].message.content) ||
-    "Sorry, I didn't catch that."
-  );
+    "Sorry, I didn't catch that.";
+
+  const updatedRecent = [...memory.recent, { role: 'user', content: userText }, { role: 'assistant', content: reply }];
+  await saveRecent(ENV, updatedRecent);
+  // Not awaited — the summary only needs to be ready before the *next*
+  // message, not before this reply is delivered.
+  updateMemorySummary(ENV, memory.summary, userText, reply)
+    .then(summary => saveSummary(ENV, summary))
+    .catch(err => console.error('Memory summary save failed:', err.message));
+
+  return reply;
 }
 
 // Lets the logged-in dashboard page talk to the user's own laptop
@@ -666,25 +716,13 @@ app.get('/api/bridge/volume-alerts', requireBridgeToken, (req, res) => {
   res.json({ alerts: getVolumeAlertsSince(req.query.since), now: Date.now() });
 });
 
-// Real back-and-forth needs the assistant to remember the last few turns,
-// not treat every utterance as a cold start — kept on the session (resets
-// on logout, which is fine for a single-user personal dashboard) rather
-// than a new datastore. Capped so the prompt doesn't grow unbounded over a
-// long session.
-const CHAT_HISTORY_MAX_MESSAGES = 12; // 6 user/assistant exchanges
-
 app.post('/api/chat', requireAuth, async (req, res) => {
   const userText = (req.body && req.body.text) || '';
   if (!userText.trim()) {
     return res.status(400).json({ error: 'No text provided' });
   }
   try {
-    const history = req.session.chatHistory || [];
-    const reply = await buildDeepSeaReply(userText, 'voice', history);
-
-    const updatedHistory = [...history, { role: 'user', content: userText }, { role: 'assistant', content: reply }];
-    req.session.chatHistory = updatedHistory.slice(-CHAT_HISTORY_MAX_MESSAGES);
-
+    const reply = await buildDeepSeaReply(userText, 'voice');
     res.json({ reply });
   } catch (err) {
     console.error('Chat error:', err);
