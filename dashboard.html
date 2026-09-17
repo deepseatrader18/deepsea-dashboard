@@ -371,7 +371,9 @@
               <i style="transform:rotate(250deg); top:-88px; height:14px;"></i>
               <i style="transform:rotate(310deg); top:-88px; height:9px;"></i>
             </div>
-            <div class="dot-globe" style="width:160px; height:160px;"></div>
+            <div class="dot-globe" style="width:160px; height:160px;">
+              <canvas id="ai-globe-canvas" width="160" height="160" style="position:absolute; inset:0; width:100%; height:100%;"></canvas>
+            </div>
             <svg class="globe-core" viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2v13"/><path d="M6 5c0 3 2 5 6 5s6-2 6-5"/><path d="M6 5l1 5h10l1-5"/><path d="M9 22l3-4 3 4"/></svg>
             <div class="globe-readout" style="top:2px; left:2px;"><span class="lbl">SYNC</span><span class="val" id="stat-sync">--</span></div>
             <div class="globe-readout" style="top:2px; right:2px; align-items:flex-end;"><span class="lbl">AGENTS</span><span class="val" id="stat-agents-count">--</span></div>
@@ -1077,6 +1079,93 @@
 
     startListening();
   }
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script>
+  // Real rotating 3D particle globe for the AI CORE panel — replaces the
+  // flat CSS dot-texture with an actual Three.js point cloud + sparse
+  // "neural link" connecting lines, layered on top of the existing CSS
+  // glow/spin backdrop (kept as-is, so this degrades gracefully to the
+  // original look if the CDN ever fails to load). Pulses brighter while
+  // DeepSea is listening or speaking, using the mic state declared above.
+  (function initAiCoreGlobe(){
+    if (typeof THREE === 'undefined') return;
+    const canvas = document.getElementById('ai-globe-canvas');
+    if (!canvas) return;
+
+    const size = 160;
+    const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setSize(size, size, false);
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+    camera.position.z = 3.4;
+
+    const cyan = new THREE.Color(0x2fe6ff);
+
+    // Fibonacci-sphere distribution — evenly spread points, no clustering
+    // at the poles the way naive random sphere sampling would produce.
+    const POINT_COUNT = 340;
+    const positions = new Float32Array(POINT_COUNT * 3);
+    const golden = Math.PI * (3 - Math.sqrt(5));
+    for (let i = 0; i < POINT_COUNT; i++) {
+      const y = 1 - (i / (POINT_COUNT - 1)) * 2;
+      const radiusAtY = Math.sqrt(Math.max(0, 1 - y * y));
+      const theta = golden * i;
+      positions[i * 3] = Math.cos(theta) * radiusAtY;
+      positions[i * 3 + 1] = y;
+      positions[i * 3 + 2] = Math.sin(theta) * radiusAtY;
+    }
+
+    const pointsGeo = new THREE.BufferGeometry();
+    pointsGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const pointsMat = new THREE.PointsMaterial({ color: cyan, size: 0.045, sizeAttenuation: true, transparent: true, opacity: 0.9 });
+    const pointCloud = new THREE.Points(pointsGeo, pointsMat);
+    scene.add(pointCloud);
+
+    // Sparse links between close neighbors only, for a "neural network"
+    // feel rather than a plain dotted ball.
+    const lineVerts = [];
+    for (let i = 0; i < POINT_COUNT; i++) {
+      for (let j = i + 1; j < POINT_COUNT; j++) {
+        const dx = positions[i * 3] - positions[j * 3];
+        const dy = positions[i * 3 + 1] - positions[j * 3 + 1];
+        const dz = positions[i * 3 + 2] - positions[j * 3 + 2];
+        if (dx * dx + dy * dy + dz * dz < 0.045) {
+          lineVerts.push(
+            positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2],
+            positions[j * 3], positions[j * 3 + 1], positions[j * 3 + 2]
+          );
+        }
+      }
+    }
+    const lineGeo = new THREE.BufferGeometry();
+    lineGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(lineVerts), 3));
+    const lineMat = new THREE.LineBasicMaterial({ color: cyan, transparent: true, opacity: 0.15 });
+    const lineMesh = new THREE.LineSegments(lineGeo, lineMat);
+    scene.add(lineMesh);
+
+    let pulse = 0;
+    function animate(){
+      requestAnimationFrame(animate);
+      pointCloud.rotation.y += 0.0035;
+      pointCloud.rotation.x = Math.sin(Date.now() * 0.0002) * 0.15;
+      lineMesh.rotation.y = pointCloud.rotation.y;
+      lineMesh.rotation.x = pointCloud.rotation.x;
+
+      const active = (typeof isSpeaking !== 'undefined' && isSpeaking) ||
+        (typeof micBtn !== 'undefined' && micBtn && micBtn.classList.contains('listening'));
+      pulse += ((active ? 1 : 0) - pulse) * 0.08;
+      pointsMat.size = 0.045 + pulse * 0.025;
+      pointsMat.opacity = 0.85 + pulse * 0.15;
+      lineMat.opacity = 0.12 + pulse * 0.18;
+
+      renderer.render(scene, camera);
+    }
+    animate();
+  })();
 </script>
 </body>
 </html>
