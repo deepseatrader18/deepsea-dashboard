@@ -9,6 +9,7 @@ const { getTechnicalAnalysis } = require('./trading/technical');
 const { runTradingPipeline } = require('./trading/pipeline');
 const { sendTelegramAlert, formatTradeAlert } = require('./trading/telegramAlert');
 const { recordTrade, checkOpenTrades, getTradeLog } = require('./trading/tradeJournal');
+const cryptoTeamStore = require('./trading/cryptoTeamStore');
 const { loadMemory, saveRecent, saveSummary } = require('./memory');
 const { MsEdgeTTS, OUTPUT_FORMAT } = require('msedge-tts');
 const app = express();
@@ -39,6 +40,10 @@ const REDIS_URL = process.env.REDIS_URL;
 const TRADING_AGENTS_SERVICE_URL = process.env.TRADING_AGENTS_SERVICE_URL;
 const TRADING_AGENTS_SERVICE_TOKEN = process.env.TRADING_AGENTS_SERVICE_TOKEN;
 const WHATSAPP_BRIDGE_TOKEN = process.env.WHATSAPP_BRIDGE_TOKEN;
+// Separate from WHATSAPP_BRIDGE_TOKEN on purpose — the Crypto Team bridge
+// (crypto-agents/, running on the owner's own laptop) has nothing to do
+// with WhatsApp, so it gets its own shared secret instead of reusing that one.
+const CRYPTO_BRIDGE_TOKEN = process.env.CRYPTO_BRIDGE_TOKEN;
 
 const ENV = {
   VPS_STATUS_URL, VPS_STATUS_KEY, GMAIL_USER, GMAIL_APP_PASSWORD,
@@ -132,6 +137,10 @@ app.get('/trading', requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, 'trading.html'));
 });
 
+app.get('/crypto', requireAuth, (req, res) => {
+  res.sendFile(path.join(__dirname, 'crypto.html'));
+});
+
 app.get('/news', requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, 'news.html'));
 });
@@ -173,6 +182,48 @@ app.post('/api/speak', requireAuth, async (req, res) => {
     console.error('TTS setup error:', err.message);
     res.status(502).json({ error: 'TTS unavailable' });
   }
+});
+
+// Crypto Team status/trades — pushed here by crypto-agents/ (running on
+// the owner's own laptop, since Binance blocks Render's US datacenter IP).
+// Render never talks to Binance directly or drives any trading decision;
+// this is display-only. Trade alerts themselves go straight to Telegram
+// from crypto-agents/, not through here — this bridge is only for the
+// /crypto dashboard page, and uses its own CRYPTO_BRIDGE_TOKEN, unrelated
+// to the WhatsApp bridge's token.
+function requireCryptoBridgeToken(req, res, next) {
+  if (!CRYPTO_BRIDGE_TOKEN) return res.status(500).json({ error: 'CRYPTO_BRIDGE_TOKEN not set on server' });
+  if (req.get('x-bridge-token') !== CRYPTO_BRIDGE_TOKEN) return res.status(401).json({ error: 'unauthorized' });
+  next();
+}
+
+app.post('/api/bridge/crypto-status', requireCryptoBridgeToken, async (req, res) => {
+  await cryptoTeamStore.saveStatus(ENV, { ...(req.body || {}), receivedAt: Date.now() });
+  res.json({ ok: true });
+});
+
+app.post('/api/bridge/crypto-trade', requireCryptoBridgeToken, async (req, res) => {
+  await cryptoTeamStore.addTrade(ENV, req.body || {});
+  res.json({ ok: true });
+});
+
+app.get('/api/crypto/status', requireAuth, async (req, res) => {
+  const status = await cryptoTeamStore.getStatus(ENV);
+  res.json(status || { available: false });
+});
+
+app.get('/api/crypto/trades', requireAuth, async (req, res) => {
+  const trades = await cryptoTeamStore.loadTrades(ENV);
+  trades.sort((a, b) => (b.closedAt || b.openedAt || 0) - (a.closedAt || a.openedAt || 0));
+  res.json({
+    trades,
+    summary: {
+      total: trades.length,
+      targetHit: trades.filter(t => t.outcome === 'target_hit').length,
+      stoppedOut: trades.filter(t => t.outcome === 'stopped_out').length,
+      realizedPnl: trades.reduce((sum, t) => sum + (typeof t.pnlQuote === 'number' ? t.pnlQuote : 0), 0)
+    }
+  });
 });
 
 app.get('/api/trades', requireAuth, async (req, res) => {
