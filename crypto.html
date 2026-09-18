@@ -159,7 +159,7 @@
       </div>
     </div>
     <div class="panel" style="grid-column:span 2;">
-      <div class="panel-head"><div class="panel-title"><span class="dot" style="background:var(--bull)"></span>Recent Volume Surges</div></div>
+      <div class="panel-head"><div class="panel-title"><span class="dot" style="background:var(--bull)"></span>Recent Scanner Hits (Volume Surges + Top Gainers)</div></div>
       <div class="surge-list" id="surgeList">Waiting for data…</div>
     </div>
   </div>
@@ -253,12 +253,13 @@
 
   function renderSurges(surges){
     const wrap = document.getElementById('surgeList');
-    if (!surges || !surges.length) { wrap.textContent = 'No volume surge detected yet.'; return; }
+    if (!surges || !surges.length) { wrap.textContent = 'No scanner hit yet.'; return; }
     wrap.innerHTML = '';
     surges.forEach(s => {
       const row = document.createElement('div');
       row.className = 'surge-row';
-      row.innerHTML = `<span class="sym">${s.symbol}</span><span class="mult mono">${s.surgeMultiple ? s.surgeMultiple.toFixed(1) + 'x volume' : '—'}</span><span class="mono" style="color:${s.priceChangePct >= 0 ? '#2fdb96' : '#ff4d6d'}">${s.priceChangePct >= 0 ? '+' : ''}${s.priceChangePct.toFixed(2)}%</span>`;
+      const tag = s.source === 'gainer' ? 'GAINER' : (s.surgeMultiple ? s.surgeMultiple.toFixed(1) + 'x volume' : '—');
+      row.innerHTML = `<span class="sym">${s.symbol}</span><span class="mult mono">${tag}</span><span class="mono" style="color:${s.priceChangePct >= 0 ? '#2fdb96' : '#ff4d6d'}">${s.priceChangePct >= 0 ? '+' : ''}${s.priceChangePct.toFixed(2)}%</span>`;
       wrap.appendChild(row);
     });
   }
