@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DEEPSEA · CRYPTO TRADING ROOM</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #060a13;
+    --panel: #0b1220;
+    --panel-2: #0d1626;
+    --border: #1a2740;
+    --border-soft: #141f36;
+    --text: #dce6f7;
+    --text-dim: #7688a8;
+    --text-faint: #4c5b78;
+    --accent: #35c7ff;
+    --accent-soft: rgba(53,199,255,.14);
+    --violet: #8b7bff;
+    --bull: #2fdb96;
+    --bull-soft: rgba(47,219,150,.14);
+    --bear: #ff4d6d;
+    --bear-soft: rgba(255,77,109,.14);
+    --amber: #ffb648;
+    --shadow: 0 1px 0 rgba(255,255,255,.02) inset, 0 12px 30px -18px rgba(0,0,0,.7);
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(1100px 560px at 15% -8%, rgba(53,199,255,.08), transparent 60%),
+      radial-gradient(900px 500px at 100% 0%, rgba(139,123,255,.07), transparent 55%),
+      var(--bg);
+    color:var(--text);
+    font-family:'Inter', system-ui, sans-serif;
+    padding:22px 16px 48px;
+  }
+  h1,h2,h3{font-family:'Chakra Petch', 'Inter', sans-serif;}
+  .mono{font-family:'JetBrains Mono', ui-monospace, monospace; font-variant-numeric:tabular-nums;}
+  .wrap{max-width:1360px;margin:0 auto;display:flex;flex-direction:column;gap:14px;}
+
+  .topbar{
+    display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;
+    background:linear-gradient(180deg, var(--panel-2), var(--panel));
+    border:1px solid var(--border);border-radius:14px;
+    padding:16px 20px;box-shadow:var(--shadow);position:relative;overflow:hidden;
+  }
+  .topbar::before{content:"";position:absolute;inset:0 0 auto 0;height:2px;background:linear-gradient(90deg, var(--amber), var(--bull) 55%, transparent);opacity:.7;}
+  .brand{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+  .brand-mark{width:38px;height:38px;border-radius:10px;flex:none;background:conic-gradient(from 220deg, var(--amber), var(--bull), var(--amber));display:flex;align-items:center;justify-content:center;box-shadow:0 0 22px -4px var(--amber);}
+  .brand-mark svg{width:20px;height:20px;color:#04121c;}
+  .brand-text h1{font-size:16px;font-weight:700;letter-spacing:.06em;margin:0;color:#eef4ff;}
+  .brand-text .sub{font-size:10.5px;color:var(--text-dim);letter-spacing:.14em;text-transform:uppercase;margin-top:2px;}
+  .back-link{font-size:11px;font-weight:600;letter-spacing:.05em;color:var(--text-dim);text-decoration:none;border:1px solid var(--border);padding:6px 12px;border-radius:8px;}
+  .top-right{display:flex;align-items:center;gap:14px;}
+  .pill{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;letter-spacing:.06em;padding:5px 10px;border-radius:999px;border:1px solid var(--border);text-transform:uppercase;}
+  .pill.live{color:var(--bear);background:var(--bear-soft);border-color:rgba(255,77,109,.3);}
+  .pill.paper{color:var(--amber);background:rgba(255,182,72,.14);border-color:rgba(255,182,72,.3);}
+  .pill.stale{color:var(--text-dim);background:transparent;}
+  .pill .dot{width:6px;height:6px;border-radius:50%;background:currentColor;box-shadow:0 0 8px currentColor;}
+  .clock{font-size:12px;color:var(--text-faint);}
+
+  .row{display:grid;gap:14px;}
+  .row1{grid-template-columns:repeat(4,1fr);}
+  @media (max-width:980px){.row1{grid-template-columns:1fr 1fr;}}
+  @media (max-width:620px){.row1{grid-template-columns:1fr;}}
+
+  .panel{background:linear-gradient(180deg, var(--panel-2), var(--panel));border:1px solid var(--border);border-radius:14px;padding:16px;box-shadow:var(--shadow);position:relative;min-width:0;}
+  .panel-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:8px;}
+  .panel-title{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--text-dim);}
+  .panel-title .dot{width:7px;height:7px;border-radius:50%;flex:none;}
+
+  .stat-big{font-size:24px;font-weight:700;color:#eef4ff;line-height:1.1;}
+  .stat-list{margin-top:10px;display:flex;flex-direction:column;gap:8px;}
+  .stat-row{display:flex;align-items:center;justify-content:space-between;font-size:12px;}
+  .stat-row .k{color:var(--text-dim);}
+  .stat-row .v{color:var(--text);font-weight:600;}
+  .stat-row .v.pos{color:var(--bull);}
+  .stat-row .v.neg{color:var(--bear);}
+
+  .surge-list{display:flex;flex-direction:column;gap:8px;max-height:180px;overflow-y:auto;}
+  .surge-row{display:flex;align-items:center;justify-content:space-between;font-size:12px;padding:6px 8px;border-radius:8px;background:rgba(255,255,255,.02);}
+  .surge-row .sym{font-weight:700;color:var(--text);}
+  .surge-row .mult{color:var(--amber);font-weight:700;}
+
+  .office-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;}
+  @media (max-width:980px){.office-grid{grid-template-columns:1fr 1fr;}}
+  @media (max-width:560px){.office-grid{grid-template-columns:1fr;}}
+
+  .cabin{position:relative;border:1px solid var(--border);border-radius:12px;background:linear-gradient(180deg, rgba(255,255,255,.03), transparent 45%), var(--panel-2);padding:14px 14px 16px;overflow:hidden;}
+  .cabin::before{content:"";position:absolute;inset:0 0 auto 0;height:3px;opacity:.8;}
+  .cabin.research::before{background:var(--accent);}
+  .cabin.discussion::before{background:var(--violet);}
+  .cabin.pm::before{background:var(--amber);}
+  .cabin.gm::before{background:var(--bull);}
+  .cabin-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px;gap:8px;}
+  .cabin-role{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--text-faint);}
+  .cabin-name{font-size:12.5px;font-weight:700;color:#eef4ff;font-family:'Chakra Petch',sans-serif;margin-top:1px;}
+  .cabin-status-dot{width:8px;height:8px;border-radius:50%;flex:none;margin-top:3px;box-shadow:0 0 8px currentColor;}
+  .cabin-desk{display:flex;align-items:center;justify-content:center;height:50px;border-radius:8px;margin:2px 0 10px;background:rgba(0,0,0,.22);border:1px solid var(--border-soft);font-size:22px;}
+  .cabin-status-text{font-size:11px;color:var(--text-dim);line-height:1.55;min-height:34px;}
+  .cabin-status-text b{color:var(--text);}
+
+  .pos-list, .log-list{display:flex;flex-direction:column;gap:7px;max-height:260px;overflow-y:auto;padding-right:2px;}
+  .pos-row, .log-row{display:flex;align-items:center;gap:8px;font-size:11px;padding:7px 8px;border-radius:6px;background:rgba(255,255,255,.015);}
+  .badge{font-size:9px;font-weight:700;letter-spacing:.04em;padding:2px 6px;border-radius:4px;flex:none;}
+  .badge.buy{background:var(--bull-soft);color:var(--bull);}
+  .badge.target_hit{background:var(--bull-soft);color:var(--bull);}
+  .badge.stopped_out{background:var(--bear-soft);color:var(--bear);}
+  .badge.paper{background:rgba(255,182,72,.14);color:var(--amber);}
+  .row-sym{color:var(--text);flex:1;font-weight:600;}
+  .row-time{color:var(--text-faint);font-size:10px;}
+
+  .reasoning-text{font-family:'JetBrains Mono',monospace;font-size:11.5px;line-height:1.6;color:var(--text-dim);background:rgba(0,0,0,.18);border:1px solid var(--border-soft);border-radius:8px;padding:10px 12px;min-height:60px;white-space:pre-wrap;}
+
+  footer{text-align:center;font-size:11px;color:var(--text-faint);padding-top:6px;line-height:1.6;}
+  footer b{color:var(--text-dim);}
+  ::-webkit-scrollbar{width:5px;}
+  ::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px;}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <div class="topbar">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M4 18l5-5 4 3 7-9" stroke="#04121c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="brand-text">
+        <h1>DEEPSEA · CRYPTO TRADING ROOM</h1>
+        <div class="sub">Binance · Continuous Volume Scan</div>
+      </div>
+    </div>
+    <div class="top-right">
+      <span class="pill" id="modePill">Loading…</span>
+      <span class="clock mono" id="hdrClock">—</span>
+      <a href="/" class="back-link">← HUB</a>
+    </div>
+  </div>
+
+  <div class="row row1">
+    <div class="panel">
+      <div class="panel-head"><div class="panel-title"><span class="dot" id="wsDot" style="background:var(--accent)"></span>Scanner (WebSocket)</div></div>
+      <div class="stat-big mono" id="scannedCount">—</div>
+      <div class="stat-list"><div class="stat-row"><span class="k">Pairs tracked live</span><span class="v" id="wsStatusText">—</span></div></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><div class="panel-title"><span class="dot" style="background:var(--amber)"></span>Balance</div></div>
+      <div class="stat-big mono" id="balanceBig">—</div>
+      <div class="stat-list">
+        <div class="stat-row"><span class="k">Today's P/L</span><span class="v mono" id="pnlToday">—</span></div>
+        <div class="stat-row"><span class="k">Total P/L (all-time)</span><span class="v mono" id="pnlTotal">—</span></div>
+        <div class="stat-row"><span class="k">Open positions</span><span class="v mono" id="openCount">—</span></div>
+      </div>
+    </div>
+    <div class="panel" style="grid-column:span 2;">
+      <div class="panel-head"><div class="panel-title"><span class="dot" style="background:var(--bull)"></span>Recent Volume Surges</div></div>
+      <div class="surge-list" id="surgeList">Waiting for data…</div>
+    </div>
+  </div>
+
+  <div class="row" style="grid-template-columns:1fr;">
+    <div class="panel">
+      <div class="panel-head"><div class="panel-title"><span class="dot" style="background:var(--accent)"></span>The Crypto Team</div></div>
+      <div class="office-grid" id="officeGrid">
+        <div class="cabin research"><div class="cabin-header"><div><div class="cabin-role">Research Desk</div><div class="cabin-name">Momentum Researcher</div></div><span class="cabin-status-dot" style="background:#7688a8"></span></div><div class="cabin-desk">📈</div><div class="cabin-status-text" data-role="researchA">Waiting…</div></div>
+        <div class="cabin research"><div class="cabin-header"><div><div class="cabin-role">Research Desk</div><div class="cabin-name">Volume Researcher</div></div><span class="cabin-status-dot" style="background:#7688a8"></span></div><div class="cabin-desk">🔊</div><div class="cabin-status-text" data-role="researchB">Waiting…</div></div>
+        <div class="cabin discussion"><div class="cabin-header"><div><div class="cabin-role">Discussion Desk</div><div class="cabin-name">Bull Debater</div></div><span class="cabin-status-dot" style="background:#7688a8"></span></div><div class="cabin-desk">🗣️</div><div class="cabin-status-text" data-role="bull">Waiting…</div></div>
+        <div class="cabin discussion"><div class="cabin-header"><div><div class="cabin-role">Discussion Desk</div><div class="cabin-name">Skeptic Debater</div></div><span class="cabin-status-dot" style="background:#7688a8"></span></div><div class="cabin-desk">🧐</div><div class="cabin-status-text" data-role="skeptic">Waiting…</div></div>
+        <div class="cabin pm"><div class="cabin-header"><div><div class="cabin-role">Portfolio Desk</div><div class="cabin-name">Position Sizer</div></div><span class="cabin-status-dot" style="background:#7688a8"></span></div><div class="cabin-desk">📐</div><div class="cabin-status-text" data-role="sizer">Waiting…</div></div>
+        <div class="cabin pm"><div class="cabin-header"><div><div class="cabin-role">Portfolio Desk</div><div class="cabin-name">Exposure Guard</div></div><span class="cabin-status-dot" style="background:#7688a8"></span></div><div class="cabin-desk">🛡️</div><div class="cabin-status-text" data-role="exposure">Waiting…</div></div>
+        <div class="cabin gm" style="grid-column:span 2;"><div class="cabin-header"><div><div class="cabin-role">Corner Office</div><div class="cabin-name">General Manager</div></div><span class="cabin-status-dot" style="background:#7688a8"></span></div><div class="cabin-desk">💼</div><div class="cabin-status-text" data-role="gm">Waiting…</div></div>
+      </div>
+      <div style="margin-top:12px;">
+        <div class="panel-title" style="margin-bottom:6px;">Latest full reasoning</div>
+        <div class="reasoning-text" id="latestReasoning">Waiting for the first volume surge to be evaluated…</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row" style="grid-template-columns:1fr 1fr;">
+    <div class="panel">
+      <div class="panel-head"><div class="panel-title"><span class="dot" style="background:var(--bull)"></span>Open Positions</div></div>
+      <div class="pos-list" id="posList">No open positions.</div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><div class="panel-title"><span class="dot" style="background:var(--amber)"></span>Trade Log</div></div>
+      <div class="stat-list" style="margin-bottom:10px;">
+        <div class="stat-row"><span class="k">Closed trades</span><span class="v mono" id="logTotal">—</span></div>
+        <div class="stat-row"><span class="k">Target hit / Stopped out</span><span class="v mono" id="logSplit">—</span></div>
+        <div class="stat-row"><span class="k">Realized P/L</span><span class="v mono" id="logPnl">—</span></div>
+      </div>
+      <div class="log-list" id="logList">Loading…</div>
+    </div>
+  </div>
+
+  <footer>Yeh page sirf status dikhata hai — sabhi decisions aur trades <b>crypto-agents/</b> service se aate hain jo owner ke apne VPS par chalti hai (Binance access ke liye), Render is loop mein kabhi order nahi bhejta. Scanning real-time WebSocket se hoti hai aur har trade alert seedha Telegram par jaata hai. Har trade real hai jab team "LIVE" mode mein ho — chhota profit target, tight stop-loss, aur conservative position sizing ke saath. Not a guarantee, not financial advice.<br><b>DeepSea Crypto Trading Room</b></footer>
+
+</div>
+
+<script>
+  function pad(n){ return n < 10 ? '0' + n : '' + n; }
+  function tickClock(){
+    const d = new Date();
+    document.getElementById('hdrClock').textContent = pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+  }
+  setInterval(tickClock, 1000);
+  tickClock();
+
+  function fmtUsd(n){
+    if (typeof n !== 'number' || !Number.isFinite(n)) return '—';
+    return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function setCabin(role, dotColor, html){
+    const el = document.querySelector(`[data-role="${role}"]`);
+    if (!el) return;
+    el.innerHTML = html;
+    const cabin = el.closest('.cabin');
+    const dot = cabin.querySelector('.cabin-status-dot');
+    if (dot) dot.style.background = dotColor;
+  }
+
+  function biasColor(bias){
+    if (bias === 'bullish') return '#2fdb96';
+    if (bias === 'bearish') return '#ff4d6d';
+    return '#7688a8';
+  }
+
+  function renderTeam(decision){
+    if (!decision) return;
+    const { researchA, researchB, discussion, positionSizing, exposure, decision: gm, symbol } = decision;
+
+    if (researchA) setCabin('researchA', biasColor(researchA.bias), `<b>${symbol}</b> — ${researchA.bias.toUpperCase()} (${researchA.confidence}%)<br>${researchA.notes}`);
+    if (researchB) setCabin('researchB', biasColor(researchB.bias), `<b>${symbol}</b> — ${researchB.bias.toUpperCase()} (${researchB.confidence}%)<br>${researchB.notes}`);
+    if (discussion) {
+      setCabin('bull', discussion.bull.supportsEntry ? '#2fdb96' : '#7688a8', discussion.bull.notes);
+      setCabin('skeptic', discussion.skeptic.blocksEntry ? '#ff4d6d' : '#2fdb96', discussion.skeptic.notes);
+    }
+    if (positionSizing) setCabin('sizer', positionSizing.approved ? '#2fdb96' : '#ff4d6d', positionSizing.reason || '—');
+    if (exposure) setCabin('exposure', exposure.approved ? '#2fdb96' : '#ff4d6d', exposure.reason || '—');
+    if (gm) {
+      const color = gm.action === 'long' ? '#2fdb96' : gm.action === 'short' ? '#ff4d6d' : '#7688a8';
+      setCabin('gm', color, `<b>${(gm.action || '—').toUpperCase()}</b> ${symbol || ''}<br>${gm.reasoning || ''}`);
+      document.getElementById('latestReasoning').textContent = gm.reasoning || '—';
+    }
+  }
+
+  function renderSurges(surges){
+    const wrap = document.getElementById('surgeList');
+    if (!surges || !surges.length) { wrap.textContent = 'No volume surge detected yet.'; return; }
+    wrap.innerHTML = '';
+    surges.forEach(s => {
+      const row = document.createElement('div');
+      row.className = 'surge-row';
+      row.innerHTML = `<span class="sym">${s.symbol}</span><span class="mult mono">${s.surgeMultiple ? s.surgeMultiple.toFixed(1) + 'x volume' : '—'}</span><span class="mono" style="color:${s.priceChangePct >= 0 ? '#2fdb96' : '#ff4d6d'}">${s.priceChangePct >= 0 ? '+' : ''}${s.priceChangePct.toFixed(2)}%</span>`;
+      wrap.appendChild(row);
+    });
+  }
+
+  function renderPositions(openPositions){
+    const wrap = document.getElementById('posList');
+    const symbols = Object.keys(openPositions || {});
+    document.getElementById('openCount').textContent = symbols.length;
+    if (!symbols.length) { wrap.textContent = 'No open positions.'; return; }
+    wrap.innerHTML = '';
+    symbols.forEach(sym => {
+      const p = openPositions[sym];
+      const row = document.createElement('div');
+      row.className = 'pos-row';
+      row.innerHTML = `<span class="badge ${p.mode === 'live' ? 'buy' : 'paper'}">${(p.mode || '—').toUpperCase()}</span><span class="row-sym mono">${sym} @ ${p.entryPrice}</span><span class="mono" style="color:#2fdb96">TP ${p.tpPrice}</span><span class="mono" style="color:#ff4d6d">SL ${p.slStopPrice}</span>`;
+      wrap.appendChild(row);
+    });
+  }
+
+  async function loadStatus(){
+    const pill = document.getElementById('modePill');
+    try {
+      const res = await fetch('/api/crypto/status');
+      const data = await res.json();
+      if (!data || data.available === false) {
+        pill.className = 'pill stale';
+        pill.textContent = 'No data yet — start crypto-agents/ on your VPS';
+        return;
+      }
+      pill.className = 'pill ' + (data.live ? 'live' : 'paper');
+      pill.innerHTML = `<span class="dot"></span>${data.live ? 'LIVE' : 'PAPER'}`;
+
+      document.getElementById('scannedCount').textContent = data.scannedCount != null ? data.scannedCount : '—';
+      document.getElementById('wsStatusText').textContent = data.wsConnected ? 'WS connected' : (data.wsConnected === false ? 'WS disconnected' : '—');
+      const wsDot = document.getElementById('wsDot');
+      if (wsDot) wsDot.style.background = data.wsConnected ? 'var(--bull)' : 'var(--bear)';
+      document.getElementById('balanceBig').textContent = fmtUsd(data.freeBalance) + ' ' + (data.quoteAsset || '');
+      const pnl = document.getElementById('pnlToday');
+      pnl.textContent = fmtUsd(data.realizedPnlToday);
+      pnl.className = 'v mono ' + (data.realizedPnlToday > 0 ? 'pos' : data.realizedPnlToday < 0 ? 'neg' : '');
+      const pnlTotal = document.getElementById('pnlTotal');
+      pnlTotal.textContent = fmtUsd(data.totalRealizedPnl);
+      pnlTotal.className = 'v mono ' + (data.totalRealizedPnl > 0 ? 'pos' : data.totalRealizedPnl < 0 ? 'neg' : '');
+
+      renderSurges(data.recentSurges);
+      renderPositions(data.openPositions);
+
+      if (data.recentDecisions && data.recentDecisions.length) {
+        renderTeam(data.recentDecisions[0]);
+      }
+    } catch (err) {
+      pill.className = 'pill stale';
+      pill.textContent = 'Connection error';
+      console.error(err);
+    }
+  }
+
+  async function loadTrades(){
+    try {
+      const res = await fetch('/api/crypto/trades');
+      const data = await res.json();
+      document.getElementById('logTotal').textContent = data.summary.total;
+      document.getElementById('logSplit').textContent = `${data.summary.targetHit} / ${data.summary.stoppedOut}`;
+      const pnlEl = document.getElementById('logPnl');
+      pnlEl.textContent = fmtUsd(data.summary.realizedPnl);
+      pnlEl.className = 'v mono ' + (data.summary.realizedPnl > 0 ? 'pos' : data.summary.realizedPnl < 0 ? 'neg' : '');
+
+      const wrap = document.getElementById('logList');
+      if (!data.trades.length) { wrap.textContent = 'No closed trades yet.'; return; }
+      wrap.innerHTML = '';
+      data.trades.slice(0, 30).forEach(t => {
+        const time = new Date(t.closedAt || t.openedAt).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
+        const row = document.createElement('div');
+        row.className = 'log-row';
+        row.innerHTML = `<span class="badge ${t.outcome || ''}">${(t.outcome || '—').replace('_',' ').toUpperCase()}</span><span class="row-sym mono">${t.symbol} ${fmtUsd(t.pnlQuote)}</span><span class="row-time mono">${time}</span>`;
+        wrap.appendChild(row);
+      });
+    } catch (err) {
+      console.error('Trade log fetch failed:', err);
+    }
+  }
+
+  loadStatus();
+  loadTrades();
+  setInterval(loadStatus, 15000);
+  setInterval(loadTrades, 30000);
+</script>
+
+</body>
+</html>
