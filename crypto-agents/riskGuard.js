@@ -1,13 +1,10 @@
 const config = require('./config');
 
-// Total capital (margin) currently committed across every open position —
-// the number MAX_TOTAL_EXPOSURE_PCT is measured against, independent of
-// how many separate positions that's spread across. Margin, not notional,
-// is the actual collateral at stake — leverage lets a small margin
-// control a larger notional, but the capital genuinely at risk is the
-// margin (bounded further still by the tight stop-loss on that notional).
+// Total capital currently committed across every open position — the
+// number MAX_TOTAL_EXPOSURE_PCT is measured against, independent of how
+// many separate positions that capital happens to be spread across.
 function calculateOpenExposure(state) {
-  return Object.values(state.openPositions).reduce((sum, pos) => sum + (pos.margin ?? pos.qty * pos.entryPrice), 0);
+  return Object.values(state.openPositions).reduce((sum, pos) => sum + pos.qty * pos.entryPrice, 0);
 }
 
 // The one place that is allowed to say "no" for account-safety reasons —
@@ -75,15 +72,14 @@ function recordClose(state, symbol, closedTrade) {
   delete state.openPositions[symbol];
   state.realizedPnlToday += closedTrade.pnlQuote;
   state.totalRealizedPnl = (state.totalRealizedPnl || 0) + closedTrade.pnlQuote;
-  // Live trades' balance always comes straight from the Futures wallet, so
-  // there's nothing to carry forward here — only paper equity needs its
-  // own ledger. The margin (not the full notional — Futures, unlike Spot,
-  // only ties up the margin) is returned along with the P/L, since the
-  // margin was reserved out of paperBalance the moment the trade opened
+  // Live trades' balance always comes straight from Binance, so there's
+  // nothing to carry forward here — only paper equity needs its own ledger.
+  // The full exit value (not just the P/L) is returned, since the entry
+  // amount was reserved out of paperBalance the moment the trade opened
   // (see pipeline.js) — returning only pnlQuote here would double-count
-  // it as still "spent" forever.
+  // the capital as still "spent" forever.
   if (closedTrade.mode !== 'live') {
-    state.paperBalance = (state.paperBalance ?? config.PAPER_STARTING_BALANCE) + (closedTrade.margin ?? 0) + closedTrade.pnlQuote;
+    state.paperBalance = (state.paperBalance ?? config.PAPER_STARTING_BALANCE) + closedTrade.qty * closedTrade.exitPrice;
   }
   state.trades.push(closedTrade);
   if (state.trades.length > 500) state.trades = state.trades.slice(-500);

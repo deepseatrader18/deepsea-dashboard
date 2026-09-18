@@ -1,18 +1,18 @@
 const config = require('./config');
-const futuresClient = require('./futuresClient');
+const binance = require('./binanceClient');
 
 function roundPrice(symbol, price) {
-  const filters = futuresClient.getSymbolFilters(symbol);
-  return futuresClient.roundStep(price, filters ? filters.tickSize : null);
+  const filters = binance.getSymbolFilters(symbol);
+  return binance.roundStep(price, filters ? filters.tickSize : null);
 }
 
-// Executes the General Manager's approved plan on Binance USDT-M Futures —
-// a market order to open (BUY for long, SELL for short), followed
-// immediately by a STOP_MARKET and a TAKE_PROFIT_MARKET closing order
-// (Futures has no single OCO the way Spot does; monitor.js watches both
-// and cancels whichever didn't fill). Sized off the *actual* fill, not
-// the pre-trade estimate, since price can move between the team's
-// decision and the order landing.
+// Executes the General Manager's approved plan: a real market buy followed
+// immediately by an OCO sell (take-profit + stop-loss) sized off the
+// *actual* fill, not the pre-trade estimate — price can move between the
+// team's decision and the order landing, and trading fees shave a sliver
+// off the base asset received, so re-deriving both from the real fill is
+// what keeps the exit order valid instead of getting rejected for
+// exceeding the free balance.
 //
 // When LIVE_TRADING_ENABLED is not exactly "true", or API keys aren't
 // configured, this runs the identical decision path but logs a "paper"
@@ -24,48 +24,48 @@ async function executePlan(plan) {
     return {
       mode: 'paper',
       symbol: plan.symbol,
-      direction: plan.direction,
       qty: plan.qty,
       entryPrice: plan.entryPrice,
       tpPrice: plan.tpPrice,
       slStopPrice: plan.slStopPrice,
-      margin: plan.margin,
       openedAt: Date.now(),
       reasoning: plan.reasoning + ' [PAPER MODE — no real order placed: set LIVE_TRADING_ENABLED=true and configure Binance API keys to go live.]'
     };
   }
 
-  await futuresClient.ensureLeverage(plan.symbol);
+  const buyOrder = await binance.placeMarketBuy(plan.symbol, plan.quoteAmount);
+  const executedQty = parseFloat(buyOrder.executedQty);
+  const cumQuote = parseFloat(buyOrder.cummulativeQuoteQty);
+  const avgFillPrice = executedQty > 0 ? cumQuote / executedQty : plan.entryPrice;
 
-  const openSide = plan.direction === 'long' ? 'BUY' : 'SELL';
-  const closeSide = plan.direction === 'long' ? 'SELL' : 'BUY';
+  const filters = binance.getSymbolFilters(plan.symbol);
+  const freeBase = await binance.getFreeBalance(filters.baseAsset);
+  const sellQty = binance.roundStep(Math.min(executedQty, freeBase), filters.stepSize);
 
-  const openOrder = await futuresClient.placeMarketOrder(plan.symbol, openSide, plan.qty);
-  const executedQty = parseFloat(openOrder.executedQty);
-  const cumQuote = parseFloat(openOrder.cumQuote);
-  const avgFillPrice = executedQty > 0 ? cumQuote / executedQty : (parseFloat(openOrder.avgPrice) || plan.entryPrice);
+  if (!sellQty || sellQty <= 0) {
+    throw new Error(`Bought ${plan.symbol} but sellable quantity rounded to 0 — cannot place exit order (buyOrder=${JSON.stringify(buyOrder)})`);
+  }
 
-  const sign = plan.direction === 'long' ? 1 : -1;
-  const tpPrice = roundPrice(plan.symbol, avgFillPrice * (1 + sign * config.TAKE_PROFIT_PCT / 100));
-  const slStopPrice = roundPrice(plan.symbol, avgFillPrice * (1 - sign * config.STOP_LOSS_PCT / 100));
+  const tpPrice = roundPrice(plan.symbol, avgFillPrice * (1 + config.TAKE_PROFIT_PCT / 100));
+  const slStopPrice = roundPrice(plan.symbol, avgFillPrice * (1 - config.STOP_LOSS_PCT / 100));
+  const slLimitPrice = roundPrice(plan.symbol, slStopPrice * 0.998);
 
-  const [tpOrder, slOrder] = await Promise.all([
-    futuresClient.placeTakeProfitMarket(plan.symbol, closeSide, tpPrice),
-    futuresClient.placeStopMarket(plan.symbol, closeSide, slStopPrice)
-  ]);
+  const ocoOrder = await binance.placeOcoSell(plan.symbol, sellQty, tpPrice, slStopPrice, slLimitPrice);
+  const legs = ocoOrder.orderReports || [];
+  const tpLeg = legs.find(l => l.type === 'LIMIT_MAKER' || l.type === 'LIMIT');
+  const slLeg = legs.find(l => l.type === 'STOP_LOSS_LIMIT' || l.type === 'STOP_LOSS');
 
   return {
     mode: 'live',
     symbol: plan.symbol,
-    direction: plan.direction,
-    qty: executedQty || plan.qty,
+    qty: sellQty,
     entryPrice: avgFillPrice,
     tpPrice,
     slStopPrice,
-    margin: plan.margin,
-    tpOrderId: tpOrder.orderId,
-    slOrderId: slOrder.orderId,
-    openOrderId: openOrder.orderId,
+    ocoOrderListId: ocoOrder.orderListId,
+    tpOrderId: tpLeg ? tpLeg.orderId : null,
+    slOrderId: slLeg ? slLeg.orderId : null,
+    buyOrderId: buyOrder.orderId,
     openedAt: Date.now(),
     reasoning: plan.reasoning
   };

@@ -1,6 +1,5 @@
 const config = require('./config');
 const binance = require('./binanceClient');
-const futuresClient = require('./futuresClient');
 const scanner = require('./scanner');
 const WsScanner = require('./wsScanner');
 const pipeline = require('./pipeline');
@@ -55,8 +54,8 @@ async function handleSurge(surge) {
   try {
     const trace = await pipeline.runForSymbol(surge, state);
     pushRecentDecision(trace);
-    if (trace.decision.action === 'long' || trace.decision.action === 'short') {
-      console.log(`ENTERED ${trace.symbol} ${trace.decision.action.toUpperCase()} (${trace.executed.mode}): ${trace.decision.reasoning}`);
+    if (trace.decision.action === 'buy') {
+      console.log(`ENTERED ${trace.symbol} (${trace.executed.mode}): ${trace.decision.reasoning}`);
       telegram.sendTelegramMessage(telegram.formatTradeOpen(trace.executed));
       stateStore.save(state); // only a 'buy' actually changes persisted state (openPositions) — a 'hold' has nothing new to save
     }
@@ -139,14 +138,12 @@ async function main() {
     console.log('Run this for a while, check /crypto on the dashboard (or the trade log below) for win rate and P/L, then set LIVE_TRADING_ENABLED=true once you are happy with the results.');
   }
 
-  // Trading itself happens on Futures (long AND short); Spot is only used
-  // for the WS volume scanner's broader coin coverage — see pipeline.js.
-  await futuresClient.syncServerTime();
-  await futuresClient.loadExchangeInfo();
+  await binance.syncServerTime();
+  await binance.loadExchangeInfo();
 
   // Refresh exchangeInfo periodically — symbols get added/delisted and
   // filters occasionally change; stale filters would round orders wrong.
-  setInterval(() => futuresClient.loadExchangeInfo().catch(err => console.error('Futures exchangeInfo refresh failed:', err.message)), 6 * 60 * 60 * 1000);
+  setInterval(() => binance.loadExchangeInfo().catch(err => console.error('exchangeInfo refresh failed:', err.message)), 6 * 60 * 60 * 1000);
 
   // Broad market regime (BTC trend) — refreshed in the background, not on
   // the hot per-trade path, since it changes far slower than any single

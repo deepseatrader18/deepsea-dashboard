@@ -26,11 +26,9 @@ function escapeHtml(text) {
 
 function formatTradeOpen(trade) {
   const modeTag = trade.mode === 'live' ? '🔴 LIVE' : '📝 PAPER';
-  const dirTag = trade.direction === 'short' ? '🔻 SHORT' : '🔺 LONG';
   return (
-    `${modeTag} — <b>${dirTag} ${escapeHtml(trade.symbol)}</b>\n\n` +
+    `${modeTag} — <b>BUY ${escapeHtml(trade.symbol)}</b>\n\n` +
     `Qty: ${trade.qty}\n` +
-    `Margin: ${trade.margin} (${config.FUTURES_LEVERAGE}x)\n` +
     `Entry: ${trade.entryPrice}\n` +
     `Target: ${trade.tpPrice}\n` +
     `Stop: ${trade.slStopPrice}`
