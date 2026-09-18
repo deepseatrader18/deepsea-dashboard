@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DEEPSEA</title>
+<title>JARVIS</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
@@ -378,7 +378,7 @@
       </div>
       <div class="top-right">
         <div id="mic-compact">
-          <button id="mic-btn" title="Talk to DeepSea">
+          <button id="mic-btn" title="Talk to Jarvis">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
               <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
@@ -401,7 +401,7 @@
 
         <div class="help-group">
           <h3>Wake Word</h3>
-          <div class="help-cmd"><b>"DeepSea" / "डीप सी"</b><span>say this first, then wait for "Ji Boss, boliye" before your command — or just click the mic button and speak directly.</span></div>
+          <div class="help-cmd"><b>"Jarvis" / "जार्विस"</b><span>say this first, then wait for "Ji Boss, boliye" before your command — or just click the mic button and speak directly.</span></div>
         </div>
 
         <div class="help-group">
@@ -422,7 +422,7 @@
         </div>
 
         <div class="help-group">
-          <h3>Talk to DeepSea</h3>
+          <h3>Talk to Jarvis</h3>
           <div class="help-cmd"><b>Trading questions</b><span>e.g. "gold mein trade plan karo" — real technical analysis + AI reasoning</span></div>
           <div class="help-cmd"><b>Email questions</b><span>e.g. "koi naya mail aaya?" — reads your real Gmail inbox</span></div>
           <div class="help-cmd"><b>Anything else</b><span>general conversation — she remembers recent context and things you've told her before</span></div>
@@ -686,7 +686,7 @@
   function logLine(src, msg){
     const feed = document.getElementById('feed-col');
     const line = document.createElement('div');
-    const cls = src === 'YOU' ? 'you' : (src === 'DEEPSEA' ? 'deepsea' : (src === 'VOLUME' ? 'volume' : 'system'));
+    const cls = src === 'YOU' ? 'you' : (src === 'JARVIS' ? 'deepsea' : (src === 'VOLUME' ? 'volume' : 'system'));
     line.className = 'feed-line ' + cls;
     const t = new Date().toLocaleTimeString('en-GB', { hour12:false });
     line.innerHTML = `<span class="t">${t}</span><span class="src">${src}</span><span>${msg}</span>`;
@@ -812,7 +812,7 @@
   const micBtn = document.getElementById('mic-btn');
   const micStatus = document.getElementById('mic-status');
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  const WAKE_WORDS = ['deepsea', 'deep sea', 'deep see', 'deepsee', 'deep si', 'deepsi', 'dipsi', 'dipsy', 'dip see', 'dip sea', 'डीपसी', 'डीप सी', 'दीपसी', 'दीप सी'];
+  const WAKE_WORDS = ['jarvis', 'jarves', 'jaarvis', 'zarvis', 'jarvish', 'जार्विस', 'जारविस', 'deepsea', 'deep sea', 'deep see', 'deepsee', 'deep si', 'deepsi', 'dipsi', 'dipsy', 'dip see', 'dip sea', 'डीपसी', 'डीप सी', 'दीपसी', 'दीप सी'];
 
   let isSpeaking = false;
   let shouldBeListening = true;
@@ -908,7 +908,7 @@
       if (!data.matched) return false;
       pendingLaptopCommand = { mode: 'local', description: data.description };
       awaitingLaptopConfirm = true;
-      logLine('DEEPSEA', `Aapne bola: "${text}". ${data.description} — pakka? Boliye "haan".`);
+      logLine('JARVIS', `Aapne bola: "${text}". ${data.description} — pakka? Boliye "haan".`);
       speak(`${data.description}. Confirm karne ke liye haan boliye.`);
       return true;
     } catch (err) {
@@ -966,7 +966,7 @@
       if (result.status === 'done') return false; // laptop itself said this isn't a laptop command
       pendingLaptopCommand = { mode: 'remote', id, description: result.description };
       awaitingLaptopConfirm = true;
-      logLine('DEEPSEA', `Aapne bola: "${text}". ${result.description} — pakka? Boliye "haan".`);
+      logLine('JARVIS', `Aapne bola: "${text}". ${result.description} — pakka? Boliye "haan".`);
       speak(`${result.description}. Confirm karne ke liye haan boliye.`);
       return true;
     } catch (err) {
@@ -998,10 +998,10 @@
         });
         const data = await res.json();
         if (data.ok) {
-          logLine('DEEPSEA', `Ho gaya: ${data.description}`);
+          logLine('JARVIS', `Ho gaya: ${data.description}`);
           speak('Ho gaya, boss.');
         } else {
-          logLine('DEEPSEA', `Cancelled (time out ho gaya): ${pending.description}`);
+          logLine('JARVIS', `Cancelled (time out ho gaya): ${pending.description}`);
           speak('Ye cancel ho gaya, dobara try karo.');
         }
       } catch (err) {
@@ -1021,10 +1021,10 @@
       });
       const result = await pollRemoteStatus(pending.id, ['done'], 20000);
       if (result && result.ok) {
-        logLine('DEEPSEA', `Ho gaya: ${result.description || pending.description}`);
+        logLine('JARVIS', `Ho gaya: ${result.description || pending.description}`);
         speak('Ho gaya, boss.');
       } else {
-        logLine('DEEPSEA', `Cancelled (time out ho gaya): ${pending.description}`);
+        logLine('JARVIS', `Cancelled (time out ho gaya): ${pending.description}`);
         speak('Ye cancel ho gaya, dobara try karo.');
       }
     } catch (err) {
@@ -1058,7 +1058,7 @@
     // always also log a clickable link so there's a guaranteed way to open
     // it even if the automatic tab didn't appear.
     window.open(match.url, '_blank');
-    logLine('DEEPSEA', `जी बॉस, मैं ${match.name} खोल रही हूँ। अगर नया टैब न खुले तो <a href="${match.url}" target="_blank" style="color:var(--cyan)">यहाँ क्लिक करें</a>।`);
+    logLine('JARVIS', `जी बॉस, मैं ${match.name} खोल रही हूँ। अगर नया टैब न खुले तो <a href="${match.url}" target="_blank" style="color:var(--cyan)">यहाँ क्लिक करें</a>।`);
     speak(`जी बॉस, मैं ${match.name} खोल रही हूँ।`);
     return true;
   }
@@ -1076,13 +1076,13 @@
       });
       const data = await res.json();
       const reply = data.reply || 'माफ़ कीजिए, कुछ गड़बड़ हो गई।';
-      logLine('DEEPSEA', reply);
+      logLine('JARVIS', reply);
       micBtn.classList.remove('listening');
       speak(reply);
     } catch (err) {
       micBtn.classList.remove('listening');
       micStatus.textContent = 'Connection error';
-      logLine('SYSTEM', 'Could not reach DeepSea brain.');
+      logLine('SYSTEM', 'Could not reach Jarvis brain.');
       startListening();
     }
   }
@@ -1106,7 +1106,7 @@
 
     recognition.onstart = () => {
       micBtn.classList.add('idle-listening');
-      micStatus.textContent = awaitingCommand ? 'Sun raha hoon...' : 'Kaho "DeepSea"...';
+      micStatus.textContent = awaitingCommand ? 'Sun raha hoon...' : 'Kaho "Jarvis"...';
     };
 
     recognition.onend = () => {
