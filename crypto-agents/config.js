@@ -93,6 +93,19 @@ const config = {
   MIN_QUOTE_VOLUME_24H: num('MIN_QUOTE_VOLUME_24H', 2_000_000), // ignore illiquid coins
   MIN_DELTA_QUOTE_VOLUME: num('MIN_DELTA_QUOTE_VOLUME', 10_000), // smaller per-second deltas than the old 20s polling window
 
+  // --- Top Gainers scanner (separate from volume-surge detection above) ---
+  // Also feeds coins already up big over the last 24h into the same team
+  // pipeline, per the account owner's request to trade Binance's "top
+  // gainers" too, not just fresh volume spikes — the Skeptic Debater still
+  // has final say on whether a given gainer is a clean move or already too
+  // extended to chase.
+  GAINER_MIN_PCT: num('GAINER_MIN_PCT', 5), // minimum 24h % gain to flag a coin as a "gainer" candidate
+  // 24h % change stays true on almost every tick once a coin crosses the
+  // bar (unlike volume delta, which naturally resets) — this cooldown is
+  // what stops the same coin from re-triggering the full pipeline (a real
+  // klines REST call) once a second for as long as it stays a gainer.
+  GAINER_COOLDOWN_MIN: num('GAINER_COOLDOWN_MIN', 15),
+
   // How often open positions are checked for their exit and a status
   // snapshot is sent to the dashboard. This is just bookkeeping speed, not
   // trading speed — the actual take-profit/stop-loss order already sits on

@@ -1,6 +1,6 @@
 const WebSocket = require('ws');
 const EventEmitter = require('events');
-const { evaluateTicker } = require('./scanner');
+const { evaluateTicker, evaluateGainer } = require('./scanner');
 
 const STREAM_URL = 'wss://stream.binance.com:9443/ws/!miniTicker@arr';
 const RECONNECT_DELAY_MS = 2000;
@@ -50,6 +50,8 @@ class WsScanner extends EventEmitter {
         const priceChangePct = openPrice > 0 ? ((lastPrice - openPrice) / openPrice) * 100 : 0;
         const surge = evaluateTicker(symbol, quoteVolume, lastPrice, priceChangePct);
         if (surge) this.emit('surge', surge);
+        const gainer = evaluateGainer(symbol, quoteVolume, lastPrice, priceChangePct);
+        if (gainer) this.emit('surge', gainer);
       }
     });
 

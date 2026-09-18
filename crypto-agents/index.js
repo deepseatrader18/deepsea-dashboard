@@ -39,7 +39,7 @@ function pushRecentDecision(trace) {
 }
 
 function pushRecentSurge(surge) {
-  recentSurges.unshift({ symbol: surge.symbol, surgeMultiple: surge.surgeMultiple, priceChangePct: surge.priceChangePct, at: Date.now() });
+  recentSurges.unshift({ symbol: surge.symbol, surgeMultiple: surge.surgeMultiple, priceChangePct: surge.priceChangePct, source: surge.source, at: Date.now() });
   if (recentSurges.length > 10) recentSurges.pop();
 }
 
@@ -55,7 +55,7 @@ async function handleSurge(surge) {
     const trace = await pipeline.runForSymbol(surge, state);
     pushRecentDecision(trace);
     if (trace.decision.action === 'buy') {
-      console.log(`ENTERED ${trace.symbol} (${trace.executed.mode}): ${trace.decision.reasoning}`);
+      console.log(`ENTERED ${trace.symbol} (${trace.executed.mode}) [${trace.surge.source || 'volume_surge'}]: ${trace.decision.reasoning}`);
       telegram.sendTelegramMessage(telegram.formatTradeOpen(trace.executed));
       stateStore.save(state); // only a 'buy' actually changes persisted state (openPositions) — a 'hold' has nothing new to save
     }

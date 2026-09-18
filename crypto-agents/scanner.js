@@ -44,7 +44,45 @@ function evaluateTicker(symbol, quoteVolume, lastPrice, priceChangePct) {
     priceChangePct,
     quoteVolume24h: quoteVolume,
     intervalDelta: delta,
-    surgeMultiple: baseline > 0 ? delta / baseline : null
+    surgeMultiple: baseline > 0 ? delta / baseline : null,
+    source: 'volume_surge'
+  };
+}
+
+// Top Gainers detection: independent of the volume-surge logic above — a
+// coin already up big over the last 24h (a "gainer"), per the account
+// owner's explicit request to trade these too, not just fresh volume
+// spikes. Reuses the exact same team pipeline (Research -> Discussion ->
+// Portfolio -> General Manager) once flagged here, so the Skeptic Debater
+// still catches an already-overextended gainer before actually buying it.
+//
+// Unlike volume delta (which naturally resets tick-to-tick), 24h % change
+// stays true on almost every tick once a coin crosses the bar — without a
+// cooldown here this would re-fire the full pipeline (a real klines REST
+// call) roughly once a second for the same coin, hammering Binance's rate
+// limit for no benefit. gainerAlertHistory enforces one alert per coin per
+// GAINER_COOLDOWN_MIN, independent of the trade-level SYMBOL_COOLDOWN_MIN
+// in riskGuard.js (which only starts after an actual position closes).
+const gainerAlertHistory = {}; // symbol -> last-alerted timestamp
+
+function evaluateGainer(symbol, quoteVolume, lastPrice, priceChangePct) {
+  if (!isQuoteMarket(symbol)) return null;
+  if (!Number.isFinite(quoteVolume) || quoteVolume < config.MIN_QUOTE_VOLUME_24H) return null;
+  if (!Number.isFinite(priceChangePct) || priceChangePct < config.GAINER_MIN_PCT) return null;
+
+  const last = gainerAlertHistory[symbol] || 0;
+  const cooldownMs = config.GAINER_COOLDOWN_MIN * 60 * 1000;
+  if (Date.now() - last < cooldownMs) return null;
+  gainerAlertHistory[symbol] = Date.now();
+
+  return {
+    symbol,
+    lastPrice,
+    priceChangePct,
+    quoteVolume24h: quoteVolume,
+    intervalDelta: null,
+    surgeMultiple: null,
+    source: 'gainer'
   };
 }
 
@@ -53,11 +91,16 @@ function evaluateTicker(symbol, quoteVolume, lastPrice, priceChangePct) {
 async function scanOnce(tickers) {
   const surges = [];
   for (const t of tickers) {
-    const surge = evaluateTicker(t.symbol, parseFloat(t.quoteVolume), parseFloat(t.lastPrice), parseFloat(t.priceChangePercent));
+    const quoteVolume = parseFloat(t.quoteVolume);
+    const lastPrice = parseFloat(t.lastPrice);
+    const priceChangePct = parseFloat(t.priceChangePercent);
+    const surge = evaluateTicker(t.symbol, quoteVolume, lastPrice, priceChangePct);
     if (surge) surges.push(surge);
+    const gainer = evaluateGainer(t.symbol, quoteVolume, lastPrice, priceChangePct);
+    if (gainer) surges.push(gainer);
   }
   surges.sort((a, b) => (b.surgeMultiple || 0) - (a.surgeMultiple || 0));
   return surges;
 }
 
-module.exports = { scanOnce, evaluateTicker, isQuoteMarket };
+module.exports = { scanOnce, evaluateTicker, evaluateGainer, isQuoteMarket };
