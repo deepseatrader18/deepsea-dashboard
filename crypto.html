@@ -245,7 +245,7 @@
     if (positionSizing) setCabin('sizer', positionSizing.approved ? '#2fdb96' : '#ff4d6d', positionSizing.reason || '—');
     if (exposure) setCabin('exposure', exposure.approved ? '#2fdb96' : '#ff4d6d', exposure.reason || '—');
     if (gm) {
-      const color = gm.action === 'buy' ? '#2fdb96' : '#7688a8';
+      const color = gm.action === 'long' ? '#2fdb96' : gm.action === 'short' ? '#ff4d6d' : '#7688a8';
       setCabin('gm', color, `<b>${(gm.action || '—').toUpperCase()}</b> ${symbol || ''}<br>${gm.reasoning || ''}`);
       document.getElementById('latestReasoning').textContent = gm.reasoning || '—';
     }
