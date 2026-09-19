@@ -5,11 +5,12 @@ const crypto = require('crypto');
 const { buildAgents, checkAllAgents } = require('./agents');
 const { getForexFactoryNews, getEconomicCalendar } = require('./trading/news');
 const { analyzeNewsImpact } = require('./trading/newsImpact');
-const { getTechnicalAnalysis } = require('./trading/technical');
+const { getTechnicalAnalysis, getMultiTimeframeTechnical } = require('./trading/technical');
 const { runTradingPipeline } = require('./trading/pipeline');
 const { sendTelegramAlert, formatTradeAlert } = require('./trading/telegramAlert');
 const { recordTrade, checkOpenTrades, getTradeLog } = require('./trading/tradeJournal');
 const cryptoTeamStore = require('./trading/cryptoTeamStore');
+const goldScalperStore = require('./trading/goldScalperStore');
 const { loadMemory, saveRecent, saveSummary } = require('./memory');
 const { MsEdgeTTS, OUTPUT_FORMAT } = require('msedge-tts');
 const app = express();
@@ -44,6 +45,10 @@ const WHATSAPP_BRIDGE_TOKEN = process.env.WHATSAPP_BRIDGE_TOKEN;
 // (crypto-agents/, running on the owner's own laptop) has nothing to do
 // with WhatsApp, so it gets its own shared secret instead of reusing that one.
 const CRYPTO_BRIDGE_TOKEN = process.env.CRYPTO_BRIDGE_TOKEN;
+// Same reasoning again for the Gold Scalper bridge — DeepSeaGoldScalperPro.mq5
+// runs in the owner's own MT5 terminal (not on Render) and pushes trade/status
+// events in over its own shared secret, unrelated to the other bridge tokens.
+const GOLD_SCALPER_BRIDGE_TOKEN = process.env.GOLD_SCALPER_BRIDGE_TOKEN;
 
 const ENV = {
   VPS_STATUS_URL, VPS_STATUS_KEY, GMAIL_USER, GMAIL_APP_PASSWORD,
@@ -139,6 +144,10 @@ app.get('/trading', requireAuth, (req, res) => {
 
 app.get('/crypto', requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, 'crypto.html'));
+});
+
+app.get('/gold-scalper', requireAuth, (req, res) => {
+  res.sendFile(path.join(__dirname, 'gold-scalper.html'));
 });
 
 app.get('/news', requireAuth, (req, res) => {
@@ -289,6 +298,63 @@ app.get('/api/crypto/trades', requireAuth, async (req, res) => {
       realizedPnl: trades.reduce((sum, t) => sum + (typeof t.pnlQuote === 'number' ? t.pnlQuote : 0), 0)
     }
   });
+});
+
+// Gold Scalper bridge — DeepSeaGoldScalperPro.mq5 (running in the owner's
+// own MT5 terminal, see mt5-ea/README.md) posts here over WebRequest() on
+// every trade open/close and once per new bar for a status heartbeat.
+// Render never talks to MT5 or the broker directly and never places a
+// trade — this endpoint only records what the EA already did, for the
+// /gold-scalper dashboard to display.
+function requireGoldScalperBridgeToken(req, res, next) {
+  if (!GOLD_SCALPER_BRIDGE_TOKEN) return res.status(500).json({ error: 'GOLD_SCALPER_BRIDGE_TOKEN not set on server' });
+  if (req.get('x-bridge-token') !== GOLD_SCALPER_BRIDGE_TOKEN) return res.status(401).json({ error: 'unauthorized' });
+  next();
+}
+
+app.post('/api/bridge/gold-scalper/trade', requireGoldScalperBridgeToken, async (req, res) => {
+  await goldScalperStore.addTradeEvent(ENV, { ...(req.body || {}), receivedAt: Date.now() });
+  res.json({ ok: true });
+});
+
+app.post('/api/bridge/gold-scalper/status', requireGoldScalperBridgeToken, async (req, res) => {
+  await goldScalperStore.saveStatus(ENV, { ...(req.body || {}), receivedAt: Date.now() });
+  res.json({ ok: true });
+});
+
+app.get('/api/gold-scalper/status', requireAuth, async (req, res) => {
+  const status = await goldScalperStore.getStatus(ENV);
+  res.json(status || { available: false });
+});
+
+app.get('/api/gold-scalper/trades', requireAuth, async (req, res) => {
+  const events = await goldScalperStore.loadTrades(ENV);
+  events.sort((a, b) => (b.receivedAt || 0) - (a.receivedAt || 0));
+
+  const closes = events.filter(e => e.event === 'close');
+  res.json({
+    events,
+    summary: {
+      totalClosed: closes.length,
+      wins: closes.filter(e => typeof e.profit === 'number' && e.profit > 0).length,
+      losses: closes.filter(e => typeof e.profit === 'number' && e.profit < 0).length,
+      realizedPnl: closes.reduce((sum, e) => sum + (typeof e.profit === 'number' ? e.profit : 0), 0)
+    }
+  });
+});
+
+// Multi-timeframe (M1/M15/H1) technical read for XAUUSD, using the same
+// ADX + Choppiness Index regime math as the EA's own DetectRegime() — see
+// trading/technical.js. Display-only; the dashboard doesn't feed this back
+// into the EA's own decisions.
+app.get('/api/gold-scalper/market', requireAuth, async (req, res) => {
+  try {
+    const timeframes = await getMultiTimeframeTechnical(ENV, 'XAUUSD');
+    res.json({ timeframes });
+  } catch (err) {
+    console.error('Gold Scalper market data error:', err.message);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
 app.get('/api/trades', requireAuth, async (req, res) => {
