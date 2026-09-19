@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DEEPSEA · GOLD SCALPER</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #060a13;
+    --panel: #0b1220;
+    --panel-2: #0d1626;
+    --border: #1a2740;
+    --border-soft: #141f36;
+    --text: #dce6f7;
+    --text-dim: #7688a8;
+    --text-faint: #4c5b78;
+    --accent: #35c7ff;
+    --gold: #ffcf5c;
+    --gold-soft: rgba(255,207,92,.14);
+    --violet: #8b7bff;
+    --bull: #2fdb96;
+    --bull-soft: rgba(47,219,150,.14);
+    --bear: #ff4d6d;
+    --bear-soft: rgba(255,77,109,.14);
+    --amber: #ffb648;
+    --shadow: 0 1px 0 rgba(255,255,255,.02) inset, 0 12px 30px -18px rgba(0,0,0,.7);
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(1100px 560px at 15% -8%, rgba(255,207,92,.08), transparent 60%),
+      radial-gradient(900px 500px at 100% 0%, rgba(139,123,255,.07), transparent 55%),
+      var(--bg);
+    color:var(--text);
+    font-family:'Inter', system-ui, sans-serif;
+    padding:22px 16px 48px;
+  }
+  h1,h2,h3{font-family:'Chakra Petch', 'Inter', sans-serif;}
+  .mono{font-family:'JetBrains Mono', ui-monospace, monospace; font-variant-numeric:tabular-nums;}
+  .wrap{max-width:1360px;margin:0 auto;display:flex;flex-direction:column;gap:14px;}
+
+  .topbar{
+    display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;
+    background:linear-gradient(180deg, var(--panel-2), var(--panel));
+    border:1px solid var(--border);border-radius:14px;
+    padding:16px 20px;box-shadow:var(--shadow);position:relative;overflow:hidden;
+  }
+  .topbar::before{content:"";position:absolute;inset:0 0 auto 0;height:2px;background:linear-gradient(90deg, var(--gold), var(--bull) 55%, transparent);opacity:.7;}
+  .brand{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+  .brand-mark{width:38px;height:38px;border-radius:10px;flex:none;background:conic-gradient(from 220deg, var(--gold), var(--bull), var(--gold));display:flex;align-items:center;justify-content:center;box-shadow:0 0 22px -4px var(--gold);}
+  .brand-mark svg{width:20px;height:20px;color:#04121c;}
+  .brand-text h1{font-size:16px;font-weight:700;letter-spacing:.06em;margin:0;color:#eef4ff;}
+  .brand-text .sub{font-size:10.5px;color:var(--text-dim);letter-spacing:.14em;text-transform:uppercase;margin-top:2px;}
+  .back-link{font-size:11px;font-weight:600;letter-spacing:.05em;color:var(--text-dim);text-decoration:none;border:1px solid var(--border);padding:6px 12px;border-radius:8px;}
+  .top-right{display:flex;align-items:center;gap:14px;}
+  .pill{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;letter-spacing:.06em;padding:5px 10px;border-radius:999px;border:1px solid var(--border);text-transform:uppercase;}
+  .pill.trending{color:var(--bull);background:var(--bull-soft);border-color:rgba(47,219,150,.3);}
+  .pill.ranging{color:var(--gold);background:var(--gold-soft);border-color:rgba(255,207,92,.3);}
+  .pill.unclear, .pill.stale{color:var(--text-dim);background:transparent;}
+  .pill .dot{width:6px;height:6px;border-radius:50%;background:currentColor;box-shadow:0 0 8px currentColor;}
+  .clock{font-size:12px;color:var(--text-faint);}
+
+  .row{display:grid;gap:14px;}
+  .row1{grid-template-columns:repeat(4,1fr);}
+  @media (max-width:980px){.row1{grid-template-columns:1fr 1fr;}}
+  @media (max-width:620px){.row1{grid-template-columns:1fr;}}
+  .row3{grid-template-columns:repeat(3,1fr);}
+  @media (max-width:820px){.row3{grid-template-columns:1fr;}}
+
+  .panel{background:linear-gradient(180deg, var(--panel-2), var(--panel));border:1px solid var(--border);border-radius:14px;padding:16px;box-shadow:var(--shadow);position:relative;min-width:0;}
+  .panel-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:8px;}
+  .panel-title{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--text-dim);}
+  .panel-title .dot{width:7px;height:7px;border-radius:50%;flex:none;}
+
+  .stat-big{font-size:24px;font-weight:700;color:#eef4ff;line-height:1.1;}
+  .stat-list{margin-top:10px;display:flex;flex-direction:column;gap:8px;}
+  .stat-row{display:flex;align-items:center;justify-content:space-between;font-size:12px;}
+  .stat-row .k{color:var(--text-dim);}
+  .stat-row .v{color:var(--text);font-weight:600;}
+  .stat-row .v.pos{color:var(--bull);}
+  .stat-row .v.neg{color:var(--bear);}
+
+  .tf-card{border:1px solid var(--border-soft);border-radius:10px;padding:12px;background:rgba(255,255,255,.015);}
+  .tf-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
+  .tf-name{font-weight:700;color:#eef4ff;font-family:'Chakra Petch',sans-serif;font-size:13px;}
+  .tf-regime{font-size:10px;font-weight:700;letter-spacing:.06em;padding:3px 8px;border-radius:999px;text-transform:uppercase;}
+  .tf-regime.trending{color:var(--bull);background:var(--bull-soft);}
+  .tf-regime.ranging{color:var(--gold);background:var(--gold-soft);}
+  .tf-regime.unclear,.tf-regime.unknown{color:var(--text-dim);background:rgba(255,255,255,.04);}
+
+  .log-list{display:flex;flex-direction:column;gap:7px;max-height:340px;overflow-y:auto;padding-right:2px;}
+  .log-row{display:flex;align-items:center;gap:8px;font-size:11px;padding:7px 8px;border-radius:6px;background:rgba(255,255,255,.015);}
+  .badge{font-size:9px;font-weight:700;letter-spacing:.04em;padding:2px 6px;border-radius:4px;flex:none;}
+  .badge.buy, .badge.win, .badge.open{background:var(--bull-soft);color:var(--bull);}
+  .badge.sell, .badge.loss{background:var(--bear-soft);color:var(--bear);}
+  .badge.Trend{background:rgba(53,199,255,.14);color:var(--accent);}
+  .badge.Range{background:var(--gold-soft);color:var(--gold);}
+  .row-sym{color:var(--text);flex:1;font-weight:600;}
+  .row-time{color:var(--text-faint);font-size:10px;}
+
+  footer{text-align:center;font-size:11px;color:var(--text-faint);padding-top:6px;line-height:1.6;}
+  footer b{color:var(--text-dim);}
+  ::-webkit-scrollbar{width:5px;}
+  ::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px;}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <div class="topbar">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M4 18l5-5 4 3 7-9" stroke="#04121c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="brand-text">
+        <h1>DEEPSEA · GOLD SCALPER</h1>
+        <div class="sub">XAUUSD · Regime-Adaptive MT5 EA</div>
+      </div>
+    </div>
+    <div class="top-right">
+      <span class="pill" id="regimePill">Loading…</span>
+      <span class="clock mono" id="hdrClock">—</span>
+      <a href="/" class="back-link">← HUB</a>
+    </div>
+  </div>
+
+  <div class="row row1">
+    <div class="panel">
+      <div class="panel-head"><div class="panel-title"><span class="dot" style="background:var(--gold)"></span>Live XAUUSD</div></div>
+      <div class="stat-big mono" id="livePrice">—</div>
+      <div class="stat-list"><div class="stat-row"><span class="k">As of</span><span class="v" id="priceAsOf">—</span></div></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><div class="panel-title"><span class="dot" style="background:var(--accent)"></span>EA Account</div></div>
+      <div class="stat-big mono" id="eaEquity">—</div>
+      <div class="stat-list">
+        <div class="stat-row"><span class="k">Balance</span><span class="v mono" id="eaBalance">—</span></div>
+        <div class="stat-row"><span class="k">Open positions</span><span class="v mono" id="eaOpen">—</span></div>
+        <div class="stat-row"><span class="k">Trades today</span><span class="v mono" id="eaTradesToday">—</span></div>
+      </div>
+    </div>
+    <div class="panel" style="grid-column:span 2;">
+      <div class="panel-head"><div class="panel-title"><span class="dot" style="background:var(--bull)"></span>Trade Log Summary</div></div>
+      <div class="stat-list">
+        <div class="stat-row"><span class="k">Closed trades</span><span class="v mono" id="logTotal">—</span></div>
+        <div class="stat-row"><span class="k">Wins / Losses</span><span class="v mono" id="logSplit">—</span></div>
+        <div class="stat-row"><span class="k">Realized P/L</span><span class="v mono" id="logPnl">—</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row" style="grid-template-columns:1fr;">
+    <div class="panel">
+      <div class="panel-head"><div class="panel-title"><span class="dot" style="background:var(--violet)"></span>Multi-Timeframe Read (same regime logic as the EA)</div></div>
+      <div class="row row3" id="tfGrid">
+        <div class="tf-card"><div class="tf-head"><span class="tf-name">M1</span></div>Loading…</div>
+        <div class="tf-card"><div class="tf-head"><span class="tf-name">M15</span></div>Loading…</div>
+        <div class="tf-card"><div class="tf-head"><span class="tf-name">H1</span></div>Loading…</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row" style="grid-template-columns:1fr;">
+    <div class="panel">
+      <div class="panel-head"><div class="panel-title"><span class="dot" style="background:var(--amber)"></span>Trade Log</div></div>
+      <div class="log-list" id="logList">Loading…</div>
+    </div>
+  </div>
+
+  <footer>Yeh page sirf status dikhata hai — sabhi decisions aur trades <b>DeepSeaGoldScalperPro.mq5</b> se aate hain jo owner ke apne MT5 terminal mein chalti hai. Render is loop mein kabhi order nahi bhejta, sirf EA ke webhook se aaya data record karta hai. Not a guarantee, not financial advice.<br><b>DeepSea Gold Scalper</b></footer>
+
+</div>
+
+<script>
+  function pad(n){ return n < 10 ? '0' + n : '' + n; }
+  function tickClock(){
+    const d = new Date();
+    document.getElementById('hdrClock').textContent = pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+  }
+  setInterval(tickClock, 1000);
+  tickClock();
+
+  function fmtUsd(n){
+    if (typeof n !== 'number' || !Number.isFinite(n)) return '—';
+    return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function regimeLabel(regime){
+    if (regime === 'trending') return 'TRENDING';
+    if (regime === 'ranging') return 'RANGING';
+    if (regime === 'unclear') return 'UNCLEAR';
+    return 'UNKNOWN';
+  }
+
+  async function loadMarket(){
+    try {
+      const res = await fetch('/api/gold-scalper/market');
+      const data = await res.json();
+      const tf = data.timeframes || {};
+      const order = ['M1', 'M15', 'H1'];
+      const grid = document.getElementById('tfGrid');
+      grid.innerHTML = '';
+
+      let overallRegime = 'unknown';
+      order.forEach(label => {
+        const entry = tf[label];
+        const card = document.createElement('div');
+        card.className = 'tf-card';
+        if (!entry || !entry.available) {
+          card.innerHTML = `<div class="tf-head"><span class="tf-name">${label}</span></div>Not available.`;
+          grid.appendChild(card);
+          return;
+        }
+        const d = entry.data;
+        if (label === 'H1') overallRegime = d.regime;
+        card.innerHTML = `
+          <div class="tf-head"><span class="tf-name">${label}</span><span class="tf-regime ${d.regime}">${regimeLabel(d.regime)}</span></div>
+          <div class="stat-list">
+            <div class="stat-row"><span class="k">Trend</span><span class="v">${d.trend}</span></div>
+            <div class="stat-row"><span class="k">RSI14</span><span class="v mono">${d.rsi14 ?? '—'}</span></div>
+            <div class="stat-row"><span class="k">ADX14</span><span class="v mono">${d.adx14 ?? '—'}</span></div>
+            <div class="stat-row"><span class="k">Choppiness</span><span class="v mono">${d.choppiness14 ?? '—'}</span></div>
+          </div>`;
+        grid.appendChild(card);
+
+        if (label === 'M1') {
+          document.getElementById('livePrice').textContent = d.price != null ? ('$' + d.price.toLocaleString('en-US')) : '—';
+          document.getElementById('priceAsOf').textContent = d.asOf ? new Date(d.asOf).toLocaleTimeString('en-GB', { hour12: false }) : '—';
+        }
+      });
+
+      const pill = document.getElementById('regimePill');
+      pill.className = 'pill ' + overallRegime;
+      pill.innerHTML = `<span class="dot"></span>${regimeLabel(overallRegime)}`;
+    } catch (err) {
+      console.error('Market data fetch failed:', err);
+    }
+  }
+
+  async function loadStatus(){
+    try {
+      const res = await fetch('/api/gold-scalper/status');
+      const data = await res.json();
+      if (!data || data.available === false) {
+        document.getElementById('eaEquity').textContent = 'No EA data yet';
+        return;
+      }
+      document.getElementById('eaEquity').textContent = fmtUsd(data.equity);
+      document.getElementById('eaBalance').textContent = fmtUsd(data.balance);
+      document.getElementById('eaOpen').textContent = data.openPositions != null ? data.openPositions : '—';
+      document.getElementById('eaTradesToday').textContent = data.tradesToday != null ? data.tradesToday : '—';
+    } catch (err) {
+      console.error('Status fetch failed:', err);
+    }
+  }
+
+  async function loadTrades(){
+    try {
+      const res = await fetch('/api/gold-scalper/trades');
+      const data = await res.json();
+      document.getElementById('logTotal').textContent = data.summary.totalClosed;
+      document.getElementById('logSplit').textContent = `${data.summary.wins} / ${data.summary.losses}`;
+      const pnlEl = document.getElementById('logPnl');
+      pnlEl.textContent = fmtUsd(data.summary.realizedPnl);
+      pnlEl.className = 'v mono ' + (data.summary.realizedPnl > 0 ? 'pos' : data.summary.realizedPnl < 0 ? 'neg' : '');
+
+      const wrap = document.getElementById('logList');
+      if (!data.events.length) { wrap.textContent = 'No trade events yet — EA ka webhook set hone ka wait ho raha hai.'; return; }
+      wrap.innerHTML = '';
+      data.events.slice(0, 50).forEach(e => {
+        const time = new Date(e.receivedAt).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
+        const row = document.createElement('div');
+        row.className = 'log-row';
+        const moduleBadge = e.module ? `<span class="badge ${e.module}">${e.module.toUpperCase()}</span>` : '';
+        const dirBadge = e.direction ? `<span class="badge ${e.direction}">${e.direction.toUpperCase()}</span>` : '';
+        let detail = '';
+        if (e.event === 'open') {
+          detail = `Entry ${e.entry} · SL ${e.sl} · TP ${e.tp} · ${e.lots} lots`;
+        } else if (e.event === 'close') {
+          detail = `${fmtUsd(e.profit)} · ${e.lots} lots`;
+        } else {
+          detail = `Status: ${e.regime || '—'}`;
+        }
+        row.innerHTML = `${moduleBadge}${dirBadge}<span class="row-sym mono">${(e.event || '').toUpperCase()} ${detail}</span><span class="row-time mono">${time}</span>`;
+        wrap.appendChild(row);
+      });
+    } catch (err) {
+      console.error('Trade log fetch failed:', err);
+    }
+  }
+
+  loadMarket();
+  loadStatus();
+  loadTrades();
+  setInterval(loadMarket, 30000);
+  setInterval(loadStatus, 15000);
+  setInterval(loadTrades, 20000);
+</script>
+
+</body>
+</html>
