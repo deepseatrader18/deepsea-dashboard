@@ -1087,6 +1087,42 @@
     return true;
   }
 
+  // "Jarvis, code karo: ..." from the mic — same cloud mailbox the WhatsApp
+  // bridge already uses (desktop-assistant/whatsapp-bridge.js). This is NOT
+  // instant: a separate Claude Code Routine only checks the mailbox roughly
+  // once an hour, does the work in its own session, and opens a GitHub PR
+  // for review — it does not open a visible app or start a live session in
+  // front of the Boss. Said plainly here so voice never overpromises what
+  // actually happens.
+  const CODE_REQUEST_PATTERN = /\bcode\s*(?:karo|kar do|kar dena|kardo)?\s*:?\s*(.+)/i;
+
+  async function tryCodeRequest(text){
+    const match = text.match(CODE_REQUEST_PATTERN);
+    const instruction = match && match[1] && match[1].trim();
+    if (!instruction) return false;
+
+    logLine('YOU', text);
+    try {
+      const res = await fetch('/api/code-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: instruction })
+      });
+      const data = await res.json();
+      if (data && data.id) {
+        logLine('JARVIS', `ठीक है बॉस, ये coding request note कर ली: "${instruction}"। अगले करीब एक घंटे के coding-check में ये शुरू होगी और तैयार होने पर एक GitHub PR बनेगा जिसे आप देख पाएंगे — ये तुरंत नहीं होता।`);
+        speak('ठीक है बॉस, coding request note कर ली। ये तुरंत नहीं, अगले करीब एक घंटे में शुरू होगी और एक PR बनेगा जो आप देख सकते हैं।');
+      } else {
+        logLine('JARVIS', 'Coding request submit nahi ho payi.');
+        speak('Coding request submit nahi ho payi, dobara try karo boss.');
+      }
+    } catch (err) {
+      logLine('SYSTEM', 'Coding request submit nahi ho payi.');
+      speak('Coding request submit nahi ho payi.');
+    }
+    return true;
+  }
+
   async function sendToDeepSea(command){
     micBtn.classList.remove('idle-listening');
     micBtn.classList.add('listening');
@@ -1166,7 +1202,10 @@
         tryLaptopCommand(spokenText).then(handled => {
           if (handled) return;
           if (tryOpenApp(spokenText)) return;
-          sendToDeepSea(spokenText);
+          tryCodeRequest(spokenText).then(codeHandled => {
+            if (codeHandled) return;
+            sendToDeepSea(spokenText);
+          });
         });
         return;
       }
