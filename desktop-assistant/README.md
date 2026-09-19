@@ -4,14 +4,14 @@
 
 ## अभी क्या कर सकता है
 
-- "DeepSea" बोलने पर जागता है (wake word)
+- "DeepSea" ya "Jarvis" बोलने पर जागता है (wake word, दोनों काम करते हैं)
 - बोलकर website खोलना: YouTube, Forex Factory, Gmail, DeepSea dashboard
 - **Apps kholna**: Chrome, Edge, Notepad, Calculator, Paint, File Explorer, Task Manager, Spotify, WhatsApp, VS Code — जैसे "DeepSea, Chrome kholo"
 - **Active window band karna**: "ye band karo" / "close this"
 - **Media control**: volume up/down/mute, play/pause, next/previous track
 - **System actions**: screenshot lena (Desktop पर save होता है), laptop lock करना, shutdown/restart
 - **Typing**: "DeepSea, type karo <jo bhi bolna hai>" — जो भी बोलोगे वो active field में type हो जाएगा
-- **Clicking**: "click karo" / "double click" / "right click" — mouse जहाँ है वहीं click होता है (आवाज़ से किसी specific button पर click नहीं हो सकता, mouse पहले वहाँ ले जाना होगा)
+- **Clicking**: "click karo" / "double click" / "right click" — mouse जहाँ है वहीं click होता है (आवाज़से किसी specific button पर click नहीं हो सकता, mouse पहले वहाँ ले जाना होगा)
 - "scroll down" / "scroll up" बोलकर current page scroll करना
 
 **हर command confirm होता है, execute होने से पहले:** wake word ("DeepSea") ke baad jo bhi command bolo, assistant use wapas dohrayega ("Aapne bola: ... — pakka?") aur ek **beep** bajega — usi waqt bolo **"haan"** ya **"confirm karo"** (~8 second ke andar), tabhi wo command chalegi. Kuch aur bolo ya chup raho to wo command cancel ho jata hai, kuch nahi hota. Ye galti se — mic ne kuch aur sun liya, ya galat samjha — kisi bhi action ko rokta hai.
@@ -22,7 +22,7 @@
 
 ## Setup (Windows)
 
-1. Python install करें (अगर पहले से नहीं है): https://www.python.org/downloads/ — install करते वक़्त "Add Python to PATH" ज़रूर टिक करें।
+1. Python install करें (अगर पहले से नहीं है): https://www.python.org/downloads/ — install करते वक्त "Add Python to PATH" ज़रूर टिक करें।
 2. यह repo अपने laptop पर clone/download करें, फिर `desktop-assistant` folder में जाएं:
    ```
    cd desktop-assistant
@@ -31,7 +31,7 @@
    ```
    pip install -r requirements.txt
    ```
-   अगर `PyAudio` install करते वक़्त error आए (Windows पर कभी-कभी होता है), तो यह try करें:
+   अगर `PyAudio` install करते वक्त error आए (Windows पर कभी-कभी होता है), तो यह try करें:
    ```
    pip install pipwin
    pipwin install pyaudio
@@ -46,22 +46,35 @@
 
 ## सीमाएं (अभी के लिए)
 
-- ऊपर बताए गए fixed commands ही समझता है (jo pehle se list mein hain) — ये कोई general AI agent नहीं है jo "jo bhi bolo wo kar de"; sirf yahan diye gaye specific patterns match karta hai. Kisi bhi naye tarah ke command ke liye code mein naya pattern add karna padega.
-- Kisi specific screen element ko naam se dhoond ke click/type nahi kar sakta (jaise "Save button dabao") — sirf current mouse position par click karta hai, aur jo bolo wahi type karta hai jahan cursor pehle se hai.
+- ऐसे बताए गए fixed commands ही समझता है (jo pehle se list mein hain) — ये कोई general AI agent नहीं है jo "jo bhi bolo wo kar de"; sirf yahan diye gaye specific patterns match karta hai. Kisi bhi naye tarah ke command ke liye code mein naya pattern add karna padega. (Neeche wala "Smart karo" iska ek experimental apwaad hai.)
+- Fixed commands (jaise "click karo") kisi specific screen element ko naam se dhoond ke click/type nahi kar sakte — sirf current mouse position par click karta hai, aur jo bolo wahi type karta hai jahan cursor pehle se hai. "Smart karo" (neeche dekhein) is limitation ko best-effort tarike se hata deta hai, lekin 100% sahi nahi hota.
 - Microphone आपके laptop का इस्तेमाल होता है, हर बार terminal खुला रखना होगा जब तक चलाना है।
-- Internet चाहिए (आवाज़ को टेक्स्ट में बदलने के लिए Google का free service इस्तेमाल होता है)।
+- Internet चाहिए (आवाज़ को टेक्स्ट में बदलने के लिए Google का free service इस्तेमाल होता है)।
+
+## "Smart karo" — screen dekh kar khud action lena (EXPERIMENTAL)
+
+"Jarvis, smart karo: <jo bhi karna hai>" bolne par ye ek screenshot leta hai, use Gemini ko bhejta hai, aur Gemini jo bhi agla click/type/key action bataye wahi karta hai — phir dobara screenshot lekar agla step, aise karke max 6 steps tak (jyada rukhne se pehle "done" bol de to wahi ruk jata hai). Ye pehli baar hai jab ye assistant apne fixed command-list se bahar jaakar khud decide karta hai ki screen par kya karna hai.
+
+**Zaroori: `.env` mein `GEMINI_API_KEY` set karna hoga** — free key yaha se milti hai: https://aistudio.google.com/apikey. Bina isके ye ek feature kaam nahi karega, baaki sab commands normal chalte rahenge.
+
+**Ye experimental hai, isliye seedhe samajh lo:**
+
+- AI screenshot dekh kar **anumaan (guess)** lagata hai ki kahan click karna hai — ye pixel-perfect nahi hota. Kabhi-kabhi galat jagah click ho sakta hai.
+- Har baar sirf ek hi shuru mein "haan" confirm hota hai (jaise baaki commands), uske baad wo khud-ba-khud (bina beech mein pooche) steps karta jata hai — isliye kisi bhi tarah ka sensitive kaam (payment, delete, kisi ko message bhejna) is se mat karwao. Agar kuch galat hote dikhe, turant terminal mein **Ctrl+C** dabao.
+- Har step terminal mein print hota hai (kya kiya aur kyun) — dekhte raho jab tak new hai.
+- Best simple, low-risk cheezon ke liye use karo (jaise "notepad mein kuch type karo", "browser mein neeche scroll karo") — complex ya risky kaam (online shopping, form submit karna jisme paise lagte hain) abhi is se mat karwao.
 
 ## Double-clap trigger + welcome voice (optional, Jarvis-style)
 
 Wake word वाले feature के अलावा, अब एक double-clap trigger भी है: दो बार जल्दी-जल्दी ताली बजाओ तो
-Spotify (अगर set किया हो), DeepSea dashboard browser में खुलता है, और Microsoft Edge की free आवाज़ में एक
-welcome line बोली जाती है (साथ ही हर command confirm करते वक़्त भी यही आवाज़ बोलती है)। यह हर terminal
+Spotify (अगर set किया हो), DeepSea dashboard browser में खुलता है, और Microsoft Edge की free आवाज़ में एक
+welcome line बोली जाती है (साथ ही हर command confirm करते वक्त भी यही आवाज़ बोलती है)। यह हर terminal
 session में सिर्फ एक बार चलता है — दोबारा चलाने के लिए `Ctrl+C` करके फिर से `python assistant.py` run करें।
 
-आवाज़ के लिए default **Microsoft Edge TTS** (`edge-tts`) इस्तेमाल होता है — बिल्कुल free, unlimited, कोई API key
+आवाज़ के लिए default **Microsoft Edge TTS** (`edge-tts`) इस्तेमाल होता है — बिल्कुल free, unlimited, कोई API key
 या signup नहीं चाहिए (ElevenLabs से switch किया गया था क्योंकि उसका free plan API से हर voice block कर देता है)।
-अगर आपके पास ElevenLabs का **paid** plan (Starter या ऊपर) है, तो `.env` में `ELEVENLABS_API_KEY` डाल दीजिए —
-`speak_welcome()` अपने आप उसी आवाज़ पर switch हो जाएगा, और अगर कभी वो call fail हो (network/limit) तो चुपचाप
+अगर आपके पास ElevenLabs का **paid** plan (Starter या ऐपर) है, तो `.env` में `ELEVENLABS_API_KEY` डाल दीजिए —
+`speak_welcome()` अपने आप उसी आवाज़ पर switch हो जाएगा, और अगर कभी वो call fail हो (network/limit) तो चुपचाप
 वापस free Edge TTS पर fall back कर देगा — कोई code change नहीं चाहिए।
 
 ### Setup
@@ -75,21 +88,21 @@ session में सिर्फ एक बार चलता है — द�
    ```
    cp .env.example .env
    ```
-   और `EDGE_TTS_VOICE` line में koi doosra voice naam daal do (list dekhne ke liye `edge-tts --list-voices` chalao).
+   और `EDGE_TTS_VOICE` line में koi doosra voice naam daal do (list dekhne ke liye `edge-tts --list-voices` chalao)।
 4. `python assistant.py` फिर से चलाएं। Terminal में "Listening for a double clap..." दिखेगा।
 
 ### Customize (`.env` में, code बदले बिना)
 
 | Setting | क्या करता है |
 | --- | --- |
-| `EDGE_TTS_VOICE` | कौन सी free आवाज़ बोलेगी (default `en-IN-NeerjaNeural`) — list ke liye `edge-tts --list-voices` |
+| `EDGE_TTS_VOICE` | कौन सी free आवाज़ बोलेगी (default `en-IN-NeerjaNeural`) — list ke liye `edge-tts --list-voices` |
 | `ELEVENLABS_API_KEY` | खाली छोड़ने पर free Edge TTS ही चलता रहेगा — paid ElevenLabs key डालने पर उसी पर switch हो जाता है |
 | `ELEVENLABS_VOICE_ID` | ElevenLabs [voice library](https://elevenlabs.io/app/voice-library) से चुनी हुई voice ki ID (default "Rachel") |
 | `CLAP_ENABLED` | `false` करने पर clap-trigger पूरी तरह बंद हो जाता है (default `true`) |
 | `CLAP_SONG_URI` | Clap पर खुलने वाला Spotify/YouTube link (खाली छोड़ने पर कुछ नहीं खुलता) |
 | `CLAP_DASHBOARD_URL` | Clap पर browser में कौन सा URL खुले (default DeepSea dashboard) |
 | `CLAP_WELCOME_PHRASE` | Edge TTS जो line बोलेगा |
-| `CLAP_SPIKE_RATIO` | कम = ताली पकड़ना आसान, ज़्यादा = false trigger कम (default `6.0`) |
+| `CLAP_SPIKE_RATIO` | कम = ताली पकड़ना आसान, ज़्यादा = false trigger कम (default `6.0`) |
 
 ### Troubleshooting
 
@@ -132,7 +145,7 @@ nahi hota.
 
 **Zaroori:** ghar wale laptop par `python assistant.py` chalna zaroori hai
 (terminal khula, internet on) — tabhi wo Render se poll kar paayega. Agar
-wo band hai, dashboard bolegi "aapka laptop abhi online nahi lag raha".
+wo band hai, dashboard bolegi "aapka laptop abhi online nahi lag raha"।
 
 ## WhatsApp bridge (optional) — फोन से DeepSea से बात करना
 
@@ -142,7 +155,7 @@ wo band hai, dashboard bolegi "aapka laptop abhi online nahi lag raha".
 पर भेज देता है। इसमें कोई third-party account (Twilio वगैरह) नहीं चाहिए — सीधे आपके
 WhatsApp से QR code scan करके connect होता है, WhatsApp Web जैसे।
 
-**ज़रूरी बात:** यह [WhatsApp की official terms के against](https://www.whatsapp.com/legal/terms-of-service)
+**ज़रूरी बात:** यह [WhatsApp की official terms के against](https://www.whatsapp.com/legal/terms-of-service)
 है (unofficial automation), इसलिए बहुत कम chance है लेकिन number restrict होने का risk
 रहता है। सिर्फ अपने personal use के लिए, कम frequency में इस्तेमाल करें।
 
@@ -153,13 +166,13 @@ WhatsApp से QR code scan करके connect होता है, WhatsApp 
    ```
    npm install
    ```
-3. `.env` में (ऊपर वाले `.env.example` से copy किया हुआ) ये दो values भरें:
+3. `.env` में (ऐपर वाले `.env.example` से copy किया हुआ) ये दो values भरें:
    - `WHATSAPP_BRIDGE_TOKEN` — कोई भी random string (जैसे `myDs2026SecretXYZ`) — ये password जैसा है
    - `DASHBOARD_CHAT_URL` — default already सही है (`https://deepsea-dashboard.onrender.com`)
 4. **यही `WHATSAPP_BRIDGE_TOKEN` value** Render dashboard पर `deepsea-dashboard` service के
-   environment variable के रूप में भी set करनी होगी (Render dashboard → deepsea-dashboard →
-   Environment → `WHATSAPP_BRIDGE_TOKEN` add करें, same value) — दोनों तरफ same string होना
-   ज़रूरी है, वरना bridge काम नहीं करेगा।
+environment variable के रूप में भी set करनी होगी (Render dashboard → deepsea-dashboard →
+Environment → `WHATSAPP_BRIDGE_TOKEN` add करें, same value) — दोनों तरफ same string होना
+ज़रूरी है, वरना bridge काम नहीं करेगा।
 5. Bridge चलाएं:
    ```
    npm start
@@ -172,16 +185,16 @@ WhatsApp से QR code scan करके connect होता है, WhatsApp 
    ```
    deepsea gold ka trade plan batao
    ```
-   कुछ second में DeepSea उसी chat में reply karegi.
+   कुछ second में DeepSea उसी chat में reply karegi।
 
 Band karne ke liye terminal mein `Ctrl+C` dabayein. Dobara chalane par QR scan nahi karna
-padega (jab tak `.wwebjs_auth` folder delete na karo).
+padega (jab tak `.wwebjs_auth` folder delete na karo)।
 
 **"Sleep mode" command ke baad:** laptop ko actually sleep mein bhejne se WhatsApp
 bridge ka background browser session (jisse ye WhatsApp se connect rehta hai)
 kabhi-kabhi toot jata hai jab laptop wapas jagta hai. Bridge ab isse khud detect
 karke apne aap restart ho jata hai (QR dobara scan nahi karna padta) — manually
-kuch karne ki zaroorat nahi.
+kuch karne ki zaroorat nahi।
 
 ### Customize (`.env` में)
 
@@ -227,12 +240,12 @@ DeepSea se baat kar sakte hain.
 ### Setup
 
 1. https://discord.com/developers/applications khole, "New Application" par click
-   karke koi bhi naam de do (jaise "DeepSea").
+   karke koi bhi naam de do (jaise "DeepSea")।
 2. Left menu mein "Bot" tab par jao, "Reset Token" dabakar token copy kar lo.
 3. Usi Bot tab mein neeche "Privileged Gateway Intents" ke andar
    **"Message Content Intent"** on kar do — bina iske bot message padh nahi payega.
 4. Apna Discord user ID lena ho to: Discord app mein Settings → Advanced →
-   "Developer Mode" on karo, phir apne naam par right-click karke "Copy User ID".
+   "Developer Mode" on karo, phir apne naam par right-click karke "Copy User ID"।
 5. `.env` mein bharo:
    - `DISCORD_BOT_TOKEN` — step 2 wala token
    - `ALLOWED_DISCORD_USER_ID` — step 4 wala ID (iske bina koi bhi jo bot ko
@@ -252,4 +265,4 @@ DeepSea se baat kar sakte hain.
    ```
 
 `WHATSAPP_BRIDGE_TOKEN` aur `DASHBOARD_CHAT_URL` wahi values use hoti hain jo
-WhatsApp bridge ke liye pehle se `.env` mein set hain — alag se kuch nahi karna.
+WhatsApp bridge ke liye pehle se `.env` mein set hain — alag se kuch nahi karna।

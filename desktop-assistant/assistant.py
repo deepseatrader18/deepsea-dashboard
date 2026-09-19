@@ -1,4 +1,6 @@
+import base64
 import ctypes
+import io
 import json
 import os
 import re
@@ -36,6 +38,10 @@ WAKE_WORDS = [
     'deepsea', 'deep sea', 'deepsee', 'dipsi', 'dipsy',
     'gypsy', 'dip singh', 'tipsy', 'deepti', 'deepsy', 'deepc',
     'pepsi', 'dc',
+    # The dashboard/voice assistant is now branded "Jarvis" — kept alongside
+    # the DeepSea variants above (never removed) so anyone still saying the
+    # old name keeps working too.
+    'jarvis', 'jarvys', 'jarvish', 'jaarvis', 'charvis', 'jervis',
 ]
 WAKE_WORDS += [w.strip().lower() for w in os.getenv('WAKE_WORDS_EXTRA', '').split(',') if w.strip()]
 
@@ -105,6 +111,19 @@ ELEVENLABS_VOICE_ID = os.getenv('ELEVENLABS_VOICE_ID', '21m00Tcm4TlvDq8ikWAM')
 # eleven_multilingual_v2 handles Hindi (Devanagari) text; eleven_turbo_v2_5
 # is faster/cheaper if you only need English.
 ELEVENLABS_MODEL_ID = os.getenv('ELEVENLABS_MODEL_ID', 'eleven_multilingual_v2')
+
+# "Smart karo: <instruction>" — an EXPERIMENTAL vision-driven mode: takes a
+# screenshot, sends it to Gemini asking for one click/type/key action at a
+# time, executes it, and repeats (up to SMART_MAX_STEPS). This is real
+# clicking/typing on the actual laptop based on the model's best guess at
+# on-screen coordinates, which is inherently imprecise — a wrong guess can
+# click the wrong thing. Only runs after the same "haan" confirmation as
+# every other command, and only if GEMINI_API_KEY is set in .env; leaving
+# it unset disables this one feature only, everything else above still
+# works exactly as before.
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '')
+GEMINI_VISION_MODEL = 'gemini-2.5-flash'
+SMART_MAX_STEPS = 6
 
 
 def has_wake_word(text):
@@ -253,6 +272,108 @@ def _resolve_create_folder(text, lower):
     return f'Desktop par "{folder_name}" naam ka folder banana', action
 
 
+def _gemini_vision_step(instruction, history):
+    """Sends one screenshot + the instruction (and what's been tried so
+    far) to Gemini and gets back exactly one next action as JSON. Coordinates
+    come back as 0-1 fractions of the screen so they scale to any resolution."""
+    screenshot = pyautogui.screenshot()
+    buf = io.BytesIO()
+    screenshot.save(buf, format='PNG')
+    img_b64 = base64.b64encode(buf.getvalue()).decode('ascii')
+
+    prompt = (
+        'You are controlling a Windows laptop by looking at a screenshot. '
+        f'The user\'s instruction is: "{instruction}". '
+        f'Steps already taken so far: {history or "none yet"}. '
+        'Look at the attached screenshot and decide the SINGLE next action needed. '
+        'Reply with ONLY one JSON object, no markdown, no extra text, one of these exact shapes: '
+        '{"action":"click","x":0.0,"y":0.0,"why":"short reason"} '
+        '(x and y are fractions of the screen width/height from 0 to 1, where 0,0 is the top-left corner), '
+        '{"action":"type","text":"...","why":"..."}, '
+        '{"action":"key","name":"enter|tab|escape","why":"..."}, '
+        'or {"action":"done","why":"why the instruction already looks complete"} if it looks finished from this screenshot. '
+        'Never output a coordinate outside the 0-1 range. Be conservative — if genuinely unsure what to click, prefer "done" over a risky guess.'
+    )
+
+    request = urllib.request.Request(
+        f'https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_VISION_MODEL}:generateContent?key={GEMINI_API_KEY}',
+        data=json.dumps({
+            'contents': [{
+                'parts': [
+                    {'text': prompt},
+                    {'inline_data': {'mime_type': 'image/png', 'data': img_b64}}
+                ]
+            }],
+            'generationConfig': {'temperature': 0.2}
+        }).encode('utf-8'),
+        method='POST'
+    )
+    request.add_header('Content-Type', 'application/json')
+    with urllib.request.urlopen(request, timeout=30) as response:
+        data = json.loads(response.read().decode('utf-8'))
+
+    reply_text = data['candidates'][0]['content']['parts'][0]['text']
+    match = re.search(r'\{.*\}', reply_text, re.DOTALL)
+    return json.loads(match.group(0) if match else reply_text)
+
+
+def _run_smart_vision(instruction):
+    if not GEMINI_API_KEY:
+        print('-> "Smart karo" ke liye .env mein GEMINI_API_KEY set nahi hai — ye ek feature kaam nahi karega, baaki sab commands normal chalte hain.')
+        return
+
+    history = []
+    screen_w, screen_h = pyautogui.size()
+    for step in range(SMART_MAX_STEPS):
+        try:
+            step_data = _gemini_vision_step(instruction, history)
+        except Exception as exc:
+            print(f'-> Smart step fail ho gaya: {exc}')
+            return
+
+        action = step_data.get('action')
+        why = step_data.get('why', '')
+        print(f'-> Smart step {step + 1}/{SMART_MAX_STEPS}: {action} ({why})')
+
+        if action == 'done':
+            print('-> Smart action complete mana gaya.')
+            return
+        if action == 'click':
+            x = int(float(step_data['x']) * screen_w)
+            y = int(float(step_data['y']) * screen_h)
+            pyautogui.click(x, y)
+            history.append(f'clicked at fraction ({step_data["x"]:.2f},{step_data["y"]:.2f})')
+        elif action == 'type':
+            to_type = step_data.get('text', '')
+            pyautogui.write(to_type, interval=0.02)
+            history.append(f'typed "{to_type}"')
+        elif action == 'key':
+            key_name = step_data.get('name', '')
+            pyautogui.press(key_name)
+            history.append(f'pressed {key_name}')
+        else:
+            print(f'-> Samajh nahi aaya ye action: {step_data}')
+            return
+        time.sleep(1.2)
+
+    print(f'-> Smart action ruk gaya ({SMART_MAX_STEPS} steps ho gaye) — agar adhoora laga to phir se bolo.')
+
+
+def _resolve_smart(text, lower):
+    # "Jarvis, smart karo: gmail khol kar naya mail likho" — experimental,
+    # see _run_smart_vision's docstring/comment above for what this does
+    # and its limits. Kept as its own distinct trigger phrase so it never
+    # accidentally matches an ordinary command.
+    match = re.search(r'\bsmart\s*karo\s*:?\s*(.+)', text, re.IGNORECASE)
+    if match:
+        instruction = match.group(1).strip()
+        return (
+            f'AI khud screen dekh kar karega: "{instruction}" (experimental, max {SMART_MAX_STEPS} steps)',
+            lambda: _run_smart_vision(instruction)
+        )
+    return None
+
+
 def _resolve_close_window(text, lower):
     # A generic "close the active window", not a fuzzy-matched kill of some
     # other named app — that's too easy to get wrong from a misheard name.
@@ -316,6 +437,7 @@ def _resolve_site(text, lower):
 COMMAND_RESOLVERS = [
     _resolve_shutdown,
     _resolve_restart,
+    _resolve_smart,
     _resolve_create_folder,
     _resolve_type,
     _resolve_click,
