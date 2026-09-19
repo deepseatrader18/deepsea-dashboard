@@ -423,12 +423,24 @@ async function buildDeepSeaReply(userText, channel = 'voice') {
   }
 
   const symbol = detectSymbol(userText);
-  if (symbol && isTradePlanRequest(userText)) {
+  if (symbol) {
+    // Fetch the real live price whenever the user mentions a symbol at all
+    // (not just for an explicit "trade plan" request) — a plain "price kya
+    // hai" question used to get no real data injected here, so the model
+    // fell back to guessing a stale number from its training data instead
+    // of the current price. Always grounding on the real Twelve Data quote
+    // fixes that for every phrasing, not just the trade-plan keywords.
     const technical = await getTechnicalAnalysis(ENV, symbol);
-    const { plan } = await runTradingPipeline(ENV, { symbol, technical });
-    contextText += plan.available
-      ? ` Trade plan for ${symbol} — action: ${plan.data.action}, confidence: ${plan.data.confidence}, entry: ${plan.data.entry}, stop-loss: ${plan.data.stopLoss}, take-profit: ${plan.data.takeProfit}, support: ${plan.data.support}, resistance: ${plan.data.resistance}. Reasoning: ${plan.data.reasoning}. The user trades manually, so clearly state the action, entry, stop-loss, and take-profit levels — they will place the trade themselves. Never guess or make up trading levels.`
-      : ` A trade plan for ${symbol} was requested but is not available right now (${plan.reason}). Tell the user honestly that trading data isn't available, don't make up a plan.`;
+    if (isTradePlanRequest(userText)) {
+      const { plan } = await runTradingPipeline(ENV, { symbol, technical });
+      contextText += plan.available
+        ? ` Trade plan for ${symbol} — action: ${plan.data.action}, confidence: ${plan.data.confidence}, entry: ${plan.data.entry}, stop-loss: ${plan.data.stopLoss}, take-profit: ${plan.data.takeProfit}, support: ${plan.data.support}, resistance: ${plan.data.resistance}. Reasoning: ${plan.data.reasoning}. The user trades manually, so clearly state the action, entry, stop-loss, and take-profit levels — they will place the trade themselves. Never guess or make up trading levels.`
+        : ` A trade plan for ${symbol} was requested but is not available right now (${plan.reason}). Tell the user honestly that trading data isn't available, don't make up a plan.`;
+    } else {
+      contextText += technical.available
+        ? ` Current real-time ${symbol} price: ${technical.data.price} (as of ${technical.data.asOf}). If the user is asking about price, use this exact real number — never guess, estimate, or recall a price from memory.`
+        : ` The user mentioned ${symbol} but its live price isn't available right now (${technical.reason}). Tell them honestly that price data is unavailable — never guess a number.`;
+    }
   }
 
   const outputLine = channel === 'whatsapp'
