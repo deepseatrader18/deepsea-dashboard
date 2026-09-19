@@ -399,14 +399,75 @@ async function updateMemorySummary(env, oldSummary, userText, reply) {
   }
 }
 
+// Gemini (same model already used for News Impact analysis) is the Boss's
+// requested engine for Jarvis's actual replies. Its free tier caps out at
+// ~20 requests/day per model, which is why this was originally migrated to
+// Groq — so a Gemini failure (quota, timeout, outage) falls straight
+// through to Groq below rather than leaving the Boss without a reply.
+async function callGemini(systemInstruction, recent, userText) {
+  const contents = [
+    ...recent.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })),
+    { role: 'user', parts: [{ text: userText }] }
+  ];
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${GEMINI_API_KEY}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents,
+        systemInstruction: { parts: [{ text: systemInstruction }] },
+        generationConfig: { temperature: 0.7 }
+      }),
+      signal: AbortSignal.timeout(15000)
+    }
+  );
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error?.message || `Gemini http ${res.status}`);
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error('Gemini returned an empty reply');
+  return text;
+}
+
+async function callGroq(systemInstruction, recent, userText) {
+  const response = await fetch(
+    'https://api.groq.com/openai/v1/chat/completions',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${GROQ_API_KEY}`
+      },
+      body: JSON.stringify({
+        // llama-3.3-70b-versatile was decommissioned by Groq (confirmed
+        // live via a model_not_found error) — openai/gpt-oss-120b is
+        // Groq's current recommended replacement, free tier ~1000
+        // requests/day, far above what this assistant needs.
+        model: 'openai/gpt-oss-120b',
+        messages: [
+          { role: 'system', content: systemInstruction },
+          ...recent,
+          { role: 'user', content: userText }
+        ]
+      })
+    }
+  );
+
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error?.message || `Groq http ${response.status}`);
+  const reply = data.choices?.[0]?.message?.content;
+  if (!reply) throw new Error('Groq returned an empty reply');
+  return reply;
+}
+
 // Shared by /api/chat (dashboard mic, spoken reply) and /api/bridge/chat
 // (WhatsApp bridge, texted reply) so both surfaces get the same DeepSea
 // persona, persistent memory, and real trade-plan/Gmail context instead of
 // two copies drifting apart. `channel` only tweaks the one line about how
 // the reply is consumed.
 async function buildDeepSeaReply(userText, channel = 'voice') {
-  if (!GROQ_API_KEY) {
-    throw new Error('GROQ_API_KEY not set on server');
+  if (!GEMINI_API_KEY && !GROQ_API_KEY) {
+    throw new Error('Neither GEMINI_API_KEY nor GROQ_API_KEY is set on server');
   }
 
   const memory = await loadMemory(ENV);
@@ -462,46 +523,18 @@ async function buildDeepSeaReply(userText, channel = 'voice') {
     (memory.summary ? `Here is what you remember about the Boss from before this conversation — bring it up naturally when relevant: ${memory.summary} ` : '') +
     outputLine;
 
-  // Groq (OpenAI-compatible endpoint) instead of Gemini — Gemini's free
-  // tier caps out at ~20 requests/day per model, which real daily use blew
-  // through repeatedly; Groq's free tier is far more generous and doesn't
-  // require billing to be added.
-  const response = await fetch(
-    'https://api.groq.com/openai/v1/chat/completions',
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${GROQ_API_KEY}`
-      },
-      body: JSON.stringify({
-        // llama-3.3-70b-versatile was decommissioned by Groq (confirmed
-        // live via a model_not_found error) — openai/gpt-oss-120b is
-        // Groq's current recommended replacement, free tier ~1000
-        // requests/day, far above what this assistant needs.
-        model: 'openai/gpt-oss-120b',
-        messages: [
-          { role: 'system', content: systemInstruction },
-          ...memory.recent,
-          { role: 'user', content: userText }
-        ]
-      })
+  let reply;
+  if (GEMINI_API_KEY) {
+    try {
+      reply = await callGemini(systemInstruction, memory.recent, userText);
+    } catch (err) {
+      console.error('Gemini reply failed, falling back to Groq:', err.message);
     }
-  );
-
-  const data = await response.json();
-
-  if (!response.ok) {
-    console.error('Groq API error:', JSON.stringify(data));
-    throw new Error('Groq API error');
   }
-
-  const reply =
-    (data.choices &&
-      data.choices[0] &&
-      data.choices[0].message &&
-      data.choices[0].message.content) ||
-    "Sorry, I didn't catch that.";
+  if (!reply) {
+    if (!GROQ_API_KEY) throw new Error('Gemini failed and no GROQ_API_KEY fallback is configured');
+    reply = await callGroq(systemInstruction, memory.recent, userText);
+  }
 
   const updatedRecent = [...memory.recent, { role: 'user', content: userText }, { role: 'assistant', content: reply }];
   await saveRecent(ENV, updatedRecent);
