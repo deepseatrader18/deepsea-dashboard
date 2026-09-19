@@ -174,6 +174,7 @@
 
   /* ---------- dot-matrix globes ---------- */
   .globe-wrap{ position:relative; flex:1; display:flex; align-items:center; justify-content:center; min-height:0; }
+  .globe-burst{ position:absolute; inset:-14px 0 0 0; width:100%; height:calc(100% + 14px); pointer-events:none; }
   .dot-globe{
     position:relative; border-radius:50%; overflow:hidden; flex-shrink:0;
     background:
@@ -438,6 +439,29 @@
           <span class="br-tl"></span><span class="br-br"></span>
           <div class="panel-title"><span class="led"></span>AI CORE · NEURAL LINK<span class="tick"></span></div>
           <div class="globe-wrap">
+            <svg class="globe-burst" viewBox="0 0 260 234" preserveAspectRatio="xMidYMid meet">
+              <defs>
+                <radialGradient id="coreBurstGrad" cx="50%" cy="50%" r="50%">
+                  <stop offset="0%" stop-color="#fff3e0" stop-opacity="0.95"/>
+                  <stop offset="35%" stop-color="#fb923c" stop-opacity="0.55"/>
+                  <stop offset="100%" stop-color="#fb923c" stop-opacity="0"/>
+                </radialGradient>
+                <filter id="burstSoften" x="-80%" y="-80%" width="260%" height="260%">
+                  <feGaussianBlur stdDeviation="2.6"/>
+                </filter>
+              </defs>
+              <g filter="url(#burstSoften)" fill="none" stroke-linecap="round">
+                <path d="M4,120 C34,86 56,132 82,104 C104,80 122,120 130,117" stroke="#2fe6ff" stroke-width="1.6" opacity="0.7"/>
+                <path d="M4,120 C34,154 56,108 82,136 C104,160 122,120 130,123" stroke="#2fe6ff" stroke-width="1.6" opacity="0.7"/>
+                <path d="M18,120 C46,62 66,152 92,90 C110,48 124,130 130,110" stroke="#1fb6d8" stroke-width="1.1" opacity="0.45"/>
+                <path d="M18,120 C46,178 66,88 92,150 C110,192 124,110 130,130" stroke="#1fb6d8" stroke-width="1.1" opacity="0.45"/>
+                <path d="M256,120 C226,86 204,132 178,104 C156,80 138,120 130,117" stroke="#2fe6ff" stroke-width="1.6" opacity="0.7"/>
+                <path d="M256,120 C226,154 204,108 178,136 C156,160 138,120 130,123" stroke="#2fe6ff" stroke-width="1.6" opacity="0.7"/>
+                <path d="M242,120 C214,62 194,152 168,90 C150,48 136,130 130,110" stroke="#1fb6d8" stroke-width="1.1" opacity="0.45"/>
+                <path d="M242,120 C214,178 194,88 168,150 C150,192 136,110 130,130" stroke="#1fb6d8" stroke-width="1.1" opacity="0.45"/>
+              </g>
+              <circle id="ai-core-glow" cx="130" cy="117" r="52" fill="url(#coreBurstGrad)"/>
+            </svg>
             <div class="globe-ticks">
               <i style="transform:rotate(20deg); top:-88px; height:14px;"></i>
               <i style="transform:rotate(70deg); top:-88px; height:10px;"></i>
@@ -1239,6 +1263,12 @@
     const lineMesh = new THREE.LineSegments(lineGeo, lineMat);
     scene.add(lineMesh);
 
+    // Orange "voice energy" glow layered behind the sphere (see .globe-burst
+    // above) — brightens and swells in the same rhythm as the point cloud
+    // below, so the whole AI Core panel visibly reacts together while
+    // Jarvis is speaking or listening, not just the sphere.
+    const coreGlow = document.getElementById('ai-core-glow');
+
     let pulse = 0;
     function animate(){
       requestAnimationFrame(animate);
@@ -1253,6 +1283,12 @@
       pointsMat.size = 0.045 + pulse * 0.025;
       pointsMat.opacity = 0.85 + pulse * 0.15;
       lineMat.opacity = 0.12 + pulse * 0.18;
+
+      if (coreGlow) {
+        const breath = 1 + Math.sin(Date.now() * 0.0012) * 0.04;
+        coreGlow.setAttribute('r', (52 * breath * (1 + pulse * 0.3)).toFixed(1));
+        coreGlow.setAttribute('opacity', (0.75 + pulse * 0.25).toFixed(2));
+      }
 
       renderer.render(scene, camera);
     }
