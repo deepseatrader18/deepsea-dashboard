@@ -155,8 +155,8 @@ app.get('/api/test-telegram', requireAuth, async (req, res) => {
 
 // Free, lifetime, neural-quality TTS (same voices as Azure Cognitive
 // Services) via Microsoft Edge's Read Aloud service — no API key, no usage
-// cost. Replaces the browser's robotic built-in speechSynthesis voice for
-// DeepSea's spoken replies.
+// cost. Used as the fallback voice below if Gemini's own TTS is unavailable
+// or fails, so Jarvis never goes silent.
 const TTS_VOICE = 'hi-IN-MadhurNeural';
 // +15% read as rushed and flat; dropping it all the way to +2% then made
 // natural sentence pauses (commas, full stops) sound like halting, stop-
@@ -165,9 +165,74 @@ const TTS_VOICE = 'hi-IN-MadhurNeural';
 const TTS_RATE = '+8%';
 const TTS_PITCH = '+3%';
 
+// Gemini's native TTS — the Boss explicitly wants "Gemini's voice", not an
+// imitation of it. Model returns raw headerless 16-bit PCM (mimeType names
+// its sample rate, e.g. "audio/L16;rate=24000"), which browsers can't play
+// directly from a blob URL, so it's wrapped in a standard WAV header below
+// before being sent to the dashboard's <audio> element.
+const GEMINI_TTS_MODEL = 'gemini-2.5-flash-preview-tts';
+const GEMINI_TTS_VOICE = 'Puck'; // one of Gemini's prebuilt voices — upbeat/confident, fits the Jarvis persona
+
+function pcmToWav(pcmData, sampleRate = 24000, numChannels = 1, bitDepth = 16) {
+  const byteRate = (sampleRate * numChannels * bitDepth) / 8;
+  const blockAlign = (numChannels * bitDepth) / 8;
+  const header = Buffer.alloc(44);
+  header.write('RIFF', 0);
+  header.writeUInt32LE(36 + pcmData.length, 4);
+  header.write('WAVE', 8);
+  header.write('fmt ', 12);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20); // PCM
+  header.writeUInt16LE(numChannels, 22);
+  header.writeUInt32LE(sampleRate, 24);
+  header.writeUInt32LE(byteRate, 28);
+  header.writeUInt16LE(blockAlign, 32);
+  header.writeUInt16LE(bitDepth, 34);
+  header.write('data', 36);
+  header.writeUInt32LE(pcmData.length, 40);
+  return Buffer.concat([header, pcmData]);
+}
+
+async function callGeminiTTS(text) {
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TTS_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text }] }],
+        generationConfig: {
+          responseModalities: ['AUDIO'],
+          speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: GEMINI_TTS_VOICE } } }
+        }
+      }),
+      signal: AbortSignal.timeout(20000)
+    }
+  );
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error?.message || `Gemini TTS http ${res.status}`);
+  const part = data.candidates?.[0]?.content?.parts?.[0];
+  const b64 = part?.inlineData?.data;
+  if (!b64) throw new Error('Gemini TTS returned no audio');
+  const rateMatch = (part.inlineData.mimeType || '').match(/rate=(\d+)/);
+  const sampleRate = rateMatch ? parseInt(rateMatch[1], 10) : 24000;
+  return pcmToWav(Buffer.from(b64, 'base64'), sampleRate);
+}
+
 app.post('/api/speak', requireAuth, async (req, res) => {
   const text = (req.body && req.body.text || '').trim();
   if (!text) return res.status(400).json({ error: 'No text provided' });
+
+  if (GEMINI_API_KEY) {
+    try {
+      const wav = await callGeminiTTS(text);
+      res.setHeader('Content-Type', 'audio/wav');
+      return res.send(wav);
+    } catch (err) {
+      console.error('Gemini TTS failed, falling back to Edge TTS:', err.message);
+    }
+  }
+
   try {
     const tts = new MsEdgeTTS();
     await tts.setMetadata(TTS_VOICE, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
