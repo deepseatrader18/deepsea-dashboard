@@ -56,6 +56,14 @@
   .brand-text h1{font-size:16px;font-weight:700;letter-spacing:.06em;margin:0;color:#eef4ff;}
   .brand-text .sub{font-size:10.5px;color:var(--text-dim);letter-spacing:.14em;text-transform:uppercase;margin-top:2px;}
   .back-link{font-size:11px;font-weight:600;letter-spacing:.05em;color:var(--text-dim);text-decoration:none;border:1px solid var(--border);padding:6px 12px;border-radius:8px;}
+  .room-switch{position:relative;}
+  .room-switch-btn{font-size:11px;font-weight:600;letter-spacing:.05em;color:var(--text-dim);background:transparent;border:1px solid var(--border);padding:6px 12px;border-radius:8px;cursor:pointer;font-family:inherit;}
+  .room-switch-btn:hover{color:var(--text);border-color:var(--accent);}
+  .room-switch-menu{position:absolute;top:calc(100% + 8px);right:0;min-width:190px;background:linear-gradient(180deg, var(--panel-2), var(--panel));border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow);padding:6px;display:none;flex-direction:column;gap:2px;z-index:80;}
+  .room-switch.open .room-switch-menu{display:flex;}
+  .room-switch-menu a{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;font-size:12px;font-weight:600;color:var(--text);text-decoration:none;}
+  .room-switch-menu a:hover{background:rgba(255,255,255,.06);}
+  .room-switch-menu a.current{color:var(--accent);}
   .top-right{display:flex;align-items:center;gap:14px;}
   .pill{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;letter-spacing:.06em;padding:5px 10px;border-radius:999px;border:1px solid var(--border);text-transform:uppercase;}
   .pill.trending{color:var(--bull);background:var(--bull-soft);border-color:rgba(47,219,150,.3);}
@@ -125,6 +133,17 @@
     <div class="top-right">
       <span class="pill" id="regimePill">Loading…</span>
       <span class="clock mono" id="hdrClock">—</span>
+      <div class="room-switch" id="roomSwitch">
+        <button class="room-switch-btn" onclick="document.getElementById('roomSwitch').classList.toggle('open')">☰ ROOMS</button>
+        <div class="room-switch-menu">
+          <a href="/">🏠 Hub</a>
+          <a href="/trading">📈 Trading Room</a>
+          <a href="/crypto">🪙 Crypto Team</a>
+          <a href="/news">📰 News Room</a>
+          <a href="/assistant">🤖 Jarvis</a>
+          <a href="/gold-scalper" class="current">🥇 Gold Scalper</a>
+        </div>
+      </div>
       <a href="/" class="back-link">← HUB</a>
     </div>
   </div>
@@ -300,6 +319,11 @@
   setInterval(loadMarket, 30000);
   setInterval(loadStatus, 15000);
   setInterval(loadTrades, 20000);
+
+  document.addEventListener('click', function(e){
+    const rs = document.getElementById('roomSwitch');
+    if (rs && rs.classList.contains('open') && !rs.contains(e.target)) rs.classList.remove('open');
+  });
 </script>
 
 </body>
