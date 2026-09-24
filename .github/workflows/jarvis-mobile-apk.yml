@@ -1,0 +1,41 @@
+name: Build JARVIS mobile APK
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches:
+      - claude/hopeful-feynman-zq8cqv
+    paths:
+      - "jarvis-mobile-app/**"
+      - ".github/workflows/jarvis-mobile-apk.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install required SDK packages
+        run: sdkmanager "platforms;android-34" "build-tools;34.0.0" --sdk_root=${ANDROID_SDK_ROOT}
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build debug APK
+        working-directory: jarvis-mobile-app
+        run: gradle assembleDebug --no-daemon
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: jarvis-control-apk
+          path: jarvis-mobile-app/app/build/outputs/apk/debug/app-debug.apk

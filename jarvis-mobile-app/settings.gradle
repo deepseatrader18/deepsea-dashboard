@@ -1,0 +1,2 @@
+rootProject.name = "JarvisControl"
+include ':app'
