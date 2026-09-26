@@ -1,0 +1,25 @@
+apply plugin: 'com.android.application'
+
+android {
+    namespace 'com.deepsea.jarvisphone'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.deepsea.jarvisphone"
+        minSdk 26
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+    }
+
+    buildTypes {
+        debug {
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}

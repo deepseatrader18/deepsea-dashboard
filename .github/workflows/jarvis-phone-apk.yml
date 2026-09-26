@@ -1,0 +1,56 @@
+name: Build JARVIS phone APK
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches:
+      - claude/hopeful-feynman-zq8cqv
+    paths:
+      - "jarvis-phone-app/**"
+      - ".github/workflows/jarvis-phone-apk.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install required SDK packages
+        run: |
+          SDKMANAGER=$(find "$ANDROID_HOME" -name "sdkmanager" -path "*cmdline-tools*" 2>/dev/null | sort -V | tail -1)
+          echo "Using sdkmanager at: $SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses > /dev/null || true
+          "$SDKMANAGER" "platforms;android-34" "build-tools;34.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build debug APK
+        working-directory: jarvis-phone-app
+        run: gradle assembleDebug --no-daemon
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: jarvis-phone-apk
+          path: jarvis-phone-app/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Commit built APK back to the repo
+        run: |
+          mkdir -p jarvis-phone-app/dist
+          cp jarvis-phone-app/app/build/outputs/apk/debug/app-debug.apk jarvis-phone-app/dist/JarvisPhone.apk
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add jarvis-phone-app/dist/JarvisPhone.apk
+          git diff --cached --quiet && echo "No changes to commit" && exit 0
+          git commit -m "Update built JARVIS Phone APK [skip ci]"
+          git push
