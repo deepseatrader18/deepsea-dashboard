@@ -1,0 +1,14 @@
+{
+  "name": "deepsea-chat-server",
+  "version": "1.0.0",
+  "description": "Realtime backend for the DeepSea Chat Android app (WhatsApp-style messaging)",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "ioredis": "^5.4.1",
+    "ws": "^8.18.0"
+  }
+}

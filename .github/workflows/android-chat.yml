@@ -1,0 +1,49 @@
+name: Android Chat APK
+
+on:
+  push:
+    paths:
+      - "android-chat/**"
+      - ".github/workflows/android-chat.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android-chat
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build APK
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon --stacktrace
+          cp app/build/outputs/apk/release/app-release.apk DeepSeaChat.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DeepSeaChat-apk
+          path: android-chat/DeepSeaChat.apk
+
+      # Phone-friendly download link: Releases → "DeepSea Chat (latest)".
+      - name: Publish to release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-chat-latest
+          name: DeepSea Chat (latest)
+          body: Latest Android build of DeepSea Chat. Download DeepSeaChat.apk on your phone and install it.
+          files: android-chat/DeepSeaChat.apk
+          make_latest: false

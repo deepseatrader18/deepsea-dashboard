@@ -43,6 +43,23 @@ services:
       - key: CRYPTO_BRIDGE_TOKEN
         sync: false
 
+  # Backend for the DeepSea Chat Android app (android-chat/): accounts, chats
+  # and a WebSocket for realtime messages. Set REDIS_URL (can be the same
+  # Redis as the dashboard — it uses its own key) or chats are wiped on every
+  # restart, since the free tier has no persistent disk.
+  - type: web
+    name: deepsea-chat
+    runtime: node
+    plan: free
+    buildCommand: cd chat-server && npm install
+    startCommand: cd chat-server && npm start
+    healthCheckPath: /health
+    envVars:
+      - key: CHAT_SECRET
+        generateValue: true
+      - key: REDIS_URL
+        sync: false
+
   # Runs the TradingAgents multi-agent LLM pipeline (github.com/TauricResearch/TradingAgents)
   # as a background job and exposes its live per-agent progress, so the Trading
   # Room's Deep Analysis panel shows real pipeline state instead of a canned

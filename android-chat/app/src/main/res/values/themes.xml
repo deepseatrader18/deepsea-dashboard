@@ -1,0 +1,6 @@
+<resources>
+    <style name="Theme.DeepSeaChat" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">#075E54</item>
+        <item name="android:windowBackground">#FFFFFF</item>
+    </style>
+</resources>
