@@ -42,6 +42,10 @@ services:
       # through Render at all.
       - key: CRYPTO_BRIDGE_TOKEN
         sync: false
+      # Secret for /api/tradingview/webhook — put it in the TradingView
+      # alert's webhook URL as ?token=... so only your alerts reach Telegram.
+      - key: TRADINGVIEW_WEBHOOK_TOKEN
+        sync: false
 
   # Runs the TradingAgents multi-agent LLM pipeline (github.com/TauricResearch/TradingAgents)
   # as a background job and exposes its live per-agent progress, so the Trading

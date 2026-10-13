@@ -49,4 +49,49 @@ function formatTradeAlert(symbol, plan) {
   );
 }
 
-module.exports = { sendTelegramAlert, formatTradeAlert };
+// TradingView strategy/indicator alerts arrive via webhook, either as the
+// JSON the user wrote into the alert's Message box or as plain text (e.g.
+// the default "{{strategy.order.action}} @ {{strategy.order.price}}" message).
+// JSON is rendered as a structured signal; anything else is forwarded as-is.
+function formatTradingViewAlert(payload) {
+  if (typeof payload === 'string') {
+    const text = payload.trim();
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed && typeof parsed === 'object') return formatTradingViewAlert(parsed);
+    } catch (_) { /* not JSON — send the raw text */ }
+    return `📈 <b>TradingView Alert</b>\n\n${escapeHtml(text || '(empty message)')}`;
+  }
+
+  const p = payload || {};
+  const pick = (...keys) => {
+    for (const k of keys) if (p[k] !== undefined && p[k] !== null && p[k] !== '') return p[k];
+    return undefined;
+  };
+  const action = pick('action', 'side', 'signal', 'order');
+  const symbol = pick('ticker', 'symbol', 'pair');
+  const known = {
+    Strategy: pick('strategy', 'name'),
+    Timeframe: pick('interval', 'timeframe', 'tf'),
+    Price: pick('price', 'close', 'entry'),
+    'Stop-Loss': pick('sl', 'stopLoss', 'stop_loss'),
+    'Take-Profit': pick('tp', 'takeProfit', 'take_profit'),
+    Contracts: pick('contracts', 'qty', 'quantity'),
+    Position: pick('position', 'market_position'),
+    Comment: pick('comment', 'message', 'note')
+  };
+  const actionText = action !== undefined ? String(action).toUpperCase() : '';
+  const emoji = /BUY|LONG/.test(actionText) ? '🟢' : /SELL|SHORT/.test(actionText) ? '🔴' : '📈';
+
+  let msg = `${emoji} <b>TradingView Signal</b>\n\n`;
+  if (symbol !== undefined || actionText) {
+    msg += [symbol !== undefined ? `<b>${escapeHtml(symbol)}</b>` : '', actionText ? `<b>${escapeHtml(actionText)}</b>` : '']
+      .filter(Boolean).join(' — ') + '\n\n';
+  }
+  for (const [label, value] of Object.entries(known)) {
+    if (value !== undefined) msg += `${label}: ${escapeHtml(value)}\n`;
+  }
+  return msg.trimEnd();
+}
+
+module.exports = { sendTelegramAlert, formatTradeAlert, formatTradingViewAlert };
