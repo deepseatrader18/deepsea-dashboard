@@ -43,7 +43,7 @@ exitOnOpposite = input.bool(true, "Close & Reverse On Opposite Signal", group=gr
 maxBarsInTrade = input.int(0, "Max Bars In Trade (0 = off)", minval=0, group=grpBt)
 signalFilter = input.string("All", "Signals To Trade", options=["All", "Clean Only", "Strong Only"], group=grpBt)
 tradeDir = input.string("Both", "Direction", options=["Both", "Long Only", "Short Only"], group=grpBt)
-lockTf = input.bool(true, "Only Trade On 5/15/20/25/30M", group=grpBt)
+lockTf = input.bool(true, "Only Trade On 1/5/15/20/25/30M", group=grpBt)
 
 grpDate = "Date Range"
 useDate = input.bool(false, "Limit Date Range", group=grpDate)
@@ -54,7 +54,7 @@ inDate = not useDate or (time >= startTime and time <= endTime)
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // TIMEFRAME LOCK
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-isAllowedTf = not lockTf or timeframe.period == "5" or timeframe.period == "15" or timeframe.period == "20" or timeframe.period == "25" or timeframe.period == "30"
+isAllowedTf = not lockTf or timeframe.period == "1" or timeframe.period == "5" or timeframe.period == "15" or timeframe.period == "20" or timeframe.period == "25" or timeframe.period == "30"
 
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // ZLEMA ENGINE
