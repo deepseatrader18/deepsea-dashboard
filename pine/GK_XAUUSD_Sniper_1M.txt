@@ -1,0 +1,328 @@
+//@version=6
+strategy("GK XAUUSD Sniper 1M — Backtest", overlay=true, initial_capital=500, default_qty_type=strategy.fixed, default_qty_value=1, commission_type=strategy.commission.cash_per_contract, commission_value=0.15, slippage=0, pyramiding=0, process_orders_on_close=false, calc_on_every_tick=false, margin_long=0.1, margin_short=0.1, max_labels_count=500)
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// GK SIGNAL ENGINE (tuned for 1M — all distances ATR-based)
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+grpSig = "Signal"
+mainLen = input.int(34, "Main Trend Length", minval=2, group=grpSig)
+fastLen = input.int(13, "Fast Trigger Length", minval=2, group=grpSig)
+atrLen = input.int(14, "ATR Length", minval=1, group=grpSig)
+rangeLookback = input.int(20, "Breakout Lookback (bars)", minval=5, group=grpSig)
+breakBufferATR = input.float(0.25, "Breakout Buffer (x ATR)", minval=0, step=0.05, group=grpSig)
+minSepATR = input.float(0.08, "Min Line Separation ATR", step=0.01, group=grpSig)
+minSlopeATR = input.float(0.045, "Min Main Slope ATR", step=0.005, group=grpSig)
+minCandleATR = input.float(0.6, "Min Candle Range (x ATR)", step=0.05, group=grpSig)
+minBodyPct = input.float(0.5, "Min Candle Body (% of range)", minval=0, maxval=1, step=0.05, group=grpSig)
+lineBlockATR = input.float(0.35, "Too Close To Line Block ATR", step=0.01, group=grpSig)
+cooldownBars = input.int(15, "Cooldown Bars After Print", minval=1, group=grpSig)
+
+grpFilt = "1M Filters"
+useTrendFilter = input.bool(true, "Trade Only With HTF Trend", group=grpFilt)
+trendTf = input.timeframe("15", "Trend Timeframe", group=grpFilt)
+trendLen = input.int(50, "Trend EMA Length", minval=5, group=grpFilt)
+useVolFilter = input.bool(true, "Volatility Filter (skip dead / spike markets)", group=grpFilt)
+volMinMult = input.float(0.7, "Min ATR vs 100-bar Avg", step=0.05, group=grpFilt)
+volMaxMult = input.float(2.5, "Max ATR vs 100-bar Avg", step=0.1, group=grpFilt)
+useSession = input.bool(true, "Trade Only In Session", group=grpFilt)
+sessionStr = input.session("0700-2000", "Session", group=grpFilt)
+sessionTz = input.string("Etc/UTC", "Session Timezone", group=grpFilt)
+closeAtSessionEnd = input.bool(true, "Close Open Trade At Session End", group=grpFilt)
+signalFilter = input.string("All", "Signals To Trade", options=["All", "Clean Only", "Strong Only"], group=grpFilt)
+tradeDir = input.string("Both", "Direction", options=["Both", "Long Only", "Short Only"], group=grpFilt)
+lockTf = input.bool(true, "Only Trade On 1M Chart", group=grpFilt)
+
+htfTf = input.timeframe("60", "Strong Label Context TF", group=grpFilt)
+htfLen = input.int(50, "Strong Label EMA Length", minval=5, group=grpFilt)
+htfSlopeLookback = input.int(2, "Strong Label Slope Lookback", minval=1, group=grpFilt)
+htfSlopeATR = input.float(0.035, "Strong Label Slope ATR", step=0.005, group=grpFilt)
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// TRADE MANAGEMENT
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+grpTr = "Trade Management"
+sizingMode = input.string("Fixed Lot", "Position Sizing", options=["Fixed Lot", "Risk %"], group=grpTr)
+lotSize = input.float(0.01, "Fixed Lot Size", minval=0.01, step=0.01, group=grpTr)
+riskPct = input.float(1.0, "Risk Per Trade % (Risk % mode)", minval=0.05, maxval=10, step=0.05, group=grpTr)
+maxLot = input.float(1.0, "Max Lot Cap", minval=0.01, step=0.01, group=grpTr)
+contractSize = input.float(100.0, "Contract Size (oz per 1 lot)", minval=1, group=grpTr)
+
+swingLen = input.int(5, "SL Behind Swing Of Last N Bars", minval=1, group=grpTr)
+slBufferATR = input.float(0.2, "SL Buffer Beyond Swing (x ATR)", minval=0, step=0.05, group=grpTr)
+slMinATR = input.float(1.0, "Min SL Distance (x ATR)", minval=0.1, step=0.1, group=grpTr)
+slMaxATR = input.float(3.0, "Max SL Distance (x ATR)", minval=0.2, step=0.1, group=grpTr)
+
+rrRatio = input.float(2.0, "Take Profit (R multiple)", minval=0.5, step=0.1, group=grpTr)
+useBE = input.bool(true, "Move SL To Breakeven", group=grpTr)
+beAtR = input.float(1.0, "Breakeven At (R in profit)", minval=0.1, step=0.1, group=grpTr)
+beLockR = input.float(0.1, "Breakeven Lock-In (R)", minval=0, step=0.05, group=grpTr)
+useTrail = input.bool(true, "ATR Trailing SL", group=grpTr)
+trailAtR = input.float(1.2, "Trail Starts At (R in profit)", minval=0.1, step=0.1, group=grpTr)
+trailATR = input.float(1.5, "Trail Distance (x ATR)", minval=0.1, step=0.1, group=grpTr)
+exitOnOpposite = input.bool(true, "Close & Reverse On Opposite Signal", group=grpTr)
+maxBarsInTrade = input.int(90, "Max Minutes In Trade (0 = off)", minval=0, group=grpTr)
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ACCOUNT PROTECTION
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+grpRisk = "Account Protection"
+maxDailyLossPct = input.float(3.0, "Max Daily Loss % (0 = off)", minval=0, step=0.5, group=grpRisk)
+maxDailyTrades = input.int(8, "Max Trades Per Day (0 = off)", minval=0, group=grpRisk)
+maxLossStreak = input.int(3, "Stop For Day After X Losses In A Row (0 = off)", minval=0, group=grpRisk)
+maxDDPct = input.float(20.0, "Stop Strategy At Max Drawdown % (0 = off)", minval=0, step=1, group=grpRisk)
+showRiskPanel = input.bool(true, "Show Risk Panel", group=grpRisk)
+
+grpDate = "Date Range"
+useDate = input.bool(false, "Limit Date Range", group=grpDate)
+startTime = input.time(timestamp("2025-01-01T00:00:00"), "Start", group=grpDate)
+endTime = input.time(timestamp("2099-01-01T00:00:00"), "End", group=grpDate)
+inDate = not useDate or (time >= startTime and time <= endTime)
+
+strategy.risk.max_drawdown(maxDDPct > 0 ? maxDDPct : 100, strategy.percent_of_equity)
+
+isAllowedTf = not lockTf or timeframe.period == "1"
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ZLEMA ENGINE
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+lagMain = int(math.floor((mainLen - 1) / 2))
+mainAdj = lagMain > 0 ? close + (close - close[lagMain]) : close
+mainLine = ta.ema(mainAdj, mainLen)
+
+lagFast = int(math.floor((fastLen - 1) / 2))
+fastAdj = lagFast > 0 ? close + (close - close[lagFast]) : close
+fastLine = ta.ema(fastAdj, fastLen)
+
+atr = ta.atr(atrLen)
+atrAvg = ta.sma(atr, 100)
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// BREAKOUT + LINE FILTER
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+rangeHigh = ta.highest(high, rangeLookback)[1]
+rangeLow = ta.lowest(low, rangeLookback)[1]
+
+rangeBreakBuy = close > rangeHigh + atr * breakBufferATR
+rangeBreakSell = close < rangeLow - atr * breakBufferATR
+tooCloseToLine = math.abs(close - mainLine) < atr * lineBlockATR
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// TREND + PRESSURE
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+mainSlope = mainLine - mainLine[1]
+sep = math.abs(fastLine - mainLine)
+
+bullLine = fastLine > mainLine and close > mainLine
+bearLine = fastLine < mainLine and close < mainLine
+bullSlope = mainSlope > atr * minSlopeATR
+bearSlope = mainSlope < -atr * minSlopeATR
+sepOk = sep > atr * minSepATR
+candleRange = high - low
+candleForce = candleRange > atr * minCandleATR
+bodyOk = candleRange > 0 and math.abs(close - open) >= candleRange * minBodyPct
+bullPressure = close > high[1] and close > open
+bearPressure = close < low[1] and close < open
+
+rawBuy = not tooCloseToLine and rangeBreakBuy and bullLine and bullSlope and sepOk and candleForce and bodyOk and bullPressure
+rawSell = not tooCloseToLine and rangeBreakSell and bearLine and bearSlope and sepOk and candleForce and bodyOk and bearPressure
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 1 PRINT PER TREND + COOLDOWN
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+var int trendLock = 0
+var int lastSignalBar = na
+
+canPrint = na(lastSignalBar) or (bar_index - lastSignalBar >= cooldownBars)
+
+gkBuy = barstate.isconfirmed and rawBuy and trendLock != 1 and canPrint
+gkSell = barstate.isconfirmed and rawSell and trendLock != -1 and canPrint
+
+trendLock := gkBuy ? 1 : gkSell ? -1 : trendLock
+lastSignalBar := gkBuy or gkSell ? bar_index : lastSignalBar
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// HTF CONTEXT — NON-REPAINTING (closed HTF bars only)
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+tfClose = request.security(syminfo.tickerid, trendTf, close[1], barmerge.gaps_off, barmerge.lookahead_on)
+tfEma = request.security(syminfo.tickerid, trendTf, ta.ema(close, trendLen)[1], barmerge.gaps_off, barmerge.lookahead_on)
+trendUp = tfClose > tfEma
+trendDown = tfClose < tfEma
+
+htfClose = request.security(syminfo.tickerid, htfTf, close[1], barmerge.gaps_off, barmerge.lookahead_on)
+htfAtr = request.security(syminfo.tickerid, htfTf, ta.atr(atrLen)[1], barmerge.gaps_off, barmerge.lookahead_on)
+htfLine = request.security(syminfo.tickerid, htfTf, ta.ema(close, htfLen)[1], barmerge.gaps_off, barmerge.lookahead_on)
+htfSlope = request.security(syminfo.tickerid, htfTf, (ta.ema(close, htfLen) - ta.ema(close, htfLen)[htfSlopeLookback])[1], barmerge.gaps_off, barmerge.lookahead_on)
+
+strongBull1H = htfClose > htfLine and htfSlope > htfAtr * htfSlopeATR
+strongBear1H = htfClose < htfLine and htfSlope < -htfAtr * htfSlopeATR
+
+strongBuy = gkBuy and strongBear1H
+strongSell = gkSell and strongBull1H
+cleanBuy = gkBuy and not strongBuy
+cleanSell = gkSell and not strongSell
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ENTRY FILTERS
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+buyPass = signalFilter == "All" ? gkBuy : signalFilter == "Clean Only" ? cleanBuy : strongBuy
+sellPass = signalFilter == "All" ? gkSell : signalFilter == "Clean Only" ? cleanSell : strongSell
+
+volOk = not useVolFilter or (atr >= atrAvg * volMinMult and atr <= atrAvg * volMaxMult)
+inSession = not useSession or not na(time(timeframe.period, sessionStr, sessionTz))
+
+goLong = isAllowedTf and inDate and inSession and volOk and tradeDir != "Short Only" and buyPass and (not useTrendFilter or trendUp)
+goShort = isAllowedTf and inDate and inSession and volOk and tradeDir != "Long Only" and sellPass and (not useTrendFilter or trendDown)
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ACCOUNT PROTECTION — DAILY GUARDS
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+newDay = ta.change(time("D")) != 0
+totalTrades = strategy.closedtrades + strategy.opentrades
+
+var float dayStartEquity = strategy.initial_capital
+var int dayStartTrades = 0
+var int lossStreak = 0
+var int lastClosedCount = 0
+
+if newDay
+    dayStartEquity := strategy.equity
+    dayStartTrades := totalTrades
+    lossStreak := 0
+
+if strategy.closedtrades > lastClosedCount
+    for i = lastClosedCount to strategy.closedtrades - 1
+        lossStreak := strategy.closedtrades.profit(i) < 0 ? lossStreak + 1 : 0
+    lastClosedCount := strategy.closedtrades
+
+dayPnL = strategy.equity - dayStartEquity
+dayPnLPct = dayStartEquity > 0 ? dayPnL / dayStartEquity * 100 : 0.0
+tradesToday = totalTrades - dayStartTrades
+
+dailyLossHit = maxDailyLossPct > 0 and dayPnLPct <= -maxDailyLossPct
+dailyTradesHit = maxDailyTrades > 0 and tradesToday >= maxDailyTrades
+streakHit = maxLossStreak > 0 and lossStreak >= maxLossStreak
+riskOk = not dailyLossHit and not dailyTradesHit and not streakHit
+
+if dailyLossHit and strategy.position_size != 0
+    strategy.close_all(comment="Daily Loss")
+
+if useSession and closeAtSessionEnd and not inSession and strategy.position_size != 0
+    strategy.close_all(comment="Session End")
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// STOP DISTANCE (behind swing, clamped by ATR) + SIZE
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+swingLow = ta.lowest(low, swingLen)
+swingHigh = ta.highest(high, swingLen)
+longSlDist = math.min(math.max(close - swingLow + atr * slBufferATR, atr * slMinATR), atr * slMaxATR)
+shortSlDist = math.min(math.max(swingHigh - close + atr * slBufferATR, atr * slMinATR), atr * slMaxATR)
+
+lotsFor(dist) =>
+    raw = sizingMode == "Risk %" ? math.floor((strategy.equity * riskPct / 100) / (dist * contractSize) * 100) / 100 : lotSize
+    math.min(raw, maxLot)
+
+longLots = lotsFor(longSlDist)
+shortLots = lotsFor(shortSlDist)
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ORDERS
+// Signal on 1M close -> fill on next bar open.
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+var float longTP = na
+var float longSL = na
+var float longRisk = na
+var float longBest = na
+var float shortTP = na
+var float shortSL = na
+var float shortRisk = na
+var float shortBest = na
+
+canLong = strategy.position_size == 0 or (strategy.position_size < 0 and exitOnOpposite)
+canShort = strategy.position_size == 0 or (strategy.position_size > 0 and exitOnOpposite)
+
+if goLong and canLong and riskOk and longLots >= 0.01
+    longRisk := longSlDist
+    longSL := close - longSlDist
+    longTP := close + longSlDist * rrRatio
+    longBest := close
+    strategy.entry("GK BUY", strategy.long, qty=longLots * contractSize, comment=strongBuy ? "BUY Strong" : "BUY", alert_message="GK BUY XAUUSD | Lot " + str.tostring(longLots, "#.##") + " | Entry ~" + str.tostring(close, "#.##") + " | SL " + str.tostring(longSL, "#.##") + " | TP " + str.tostring(longTP, "#.##"))
+
+if goShort and canShort and riskOk and shortLots >= 0.01
+    shortRisk := shortSlDist
+    shortSL := close + shortSlDist
+    shortTP := close - shortSlDist * rrRatio
+    shortBest := close
+    strategy.entry("GK SELL", strategy.short, qty=shortLots * contractSize, comment=strongSell ? "SELL Strong" : "SELL", alert_message="GK SELL XAUUSD | Lot " + str.tostring(shortLots, "#.##") + " | Entry ~" + str.tostring(close, "#.##") + " | SL " + str.tostring(shortSL, "#.##") + " | TP " + str.tostring(shortTP, "#.##"))
+
+// breakeven + ATR trail, ratcheted on each closed bar (SL only ever tightens)
+if strategy.position_size > 0
+    entryPx = strategy.position_avg_price
+    longBest := math.max(nz(longBest, high), high)
+    gain = longBest - entryPx
+    if useBE and gain >= longRisk * beAtR
+        longSL := math.max(longSL, entryPx + longRisk * beLockR)
+    if useTrail and gain >= longRisk * trailAtR
+        longSL := math.max(longSL, longBest - atr * trailATR)
+
+if strategy.position_size < 0
+    entryPx = strategy.position_avg_price
+    shortBest := math.min(nz(shortBest, low), low)
+    gain = entryPx - shortBest
+    if useBE and gain >= shortRisk * beAtR
+        shortSL := math.min(shortSL, entryPx - shortRisk * beLockR)
+    if useTrail and gain >= shortRisk * trailAtR
+        shortSL := math.min(shortSL, shortBest + atr * trailATR)
+
+strategy.exit("XL", from_entry="GK BUY", limit=longTP, stop=longSL, comment_profit="TP", comment_loss="SL", alert_message="GK BUY closed XAUUSD | SL now " + str.tostring(longSL, "#.##"))
+strategy.exit("XS", from_entry="GK SELL", limit=shortTP, stop=shortSL, comment_profit="TP", comment_loss="SL", alert_message="GK SELL closed XAUUSD | SL now " + str.tostring(shortSL, "#.##"))
+
+// time exit
+if maxBarsInTrade > 0 and strategy.position_size != 0
+    entryBarIdx = strategy.opentrades.entry_bar_index(strategy.opentrades - 1)
+    if bar_index - entryBarIdx >= maxBarsInTrade
+        strategy.close_all(comment="Time")
+
+if useDate and time > endTime
+    strategy.close_all(comment="End")
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// VISUALS
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+lineColor = bullLine ? color.lime : bearLine ? color.red : color.orange
+plot(isAllowedTf ? mainLine : na, title="GK Main Line", color=lineColor, linewidth=2)
+
+plot(strategy.position_size > 0 ? longTP : na, "Long TP", color.green, 1, plot.style_linebr)
+plot(strategy.position_size > 0 ? longSL : na, "Long SL / Trail", color.red, 1, plot.style_linebr)
+plot(strategy.position_size < 0 ? shortTP : na, "Short TP", color.green, 1, plot.style_linebr)
+plot(strategy.position_size < 0 ? shortSL : na, "Short SL / Trail", color.red, 1, plot.style_linebr)
+
+bgcolor(useSession and isAllowedTf and not inSession ? color.new(color.gray, 92) : na, title="Out Of Session")
+barcolor(isAllowedTf and (goLong or goShort) ? color.rgb(0, 255, 255) : na)
+
+plotshape(isAllowedTf and goLong and not strongBuy, title="GK BUY", text="GK BUY", style=shape.labelup, location=location.belowbar, color=color.green, textcolor=color.white, size=size.small)
+plotshape(isAllowedTf and goShort and not strongSell, title="GK SELL", text="GK SELL", style=shape.labeldown, location=location.abovebar, color=color.red, textcolor=color.white, size=size.small)
+plotshape(isAllowedTf and goLong and strongBuy, title="GK BUY STRONG", text="BUY\nStrong", style=shape.labelup, location=location.belowbar, color=color.orange, textcolor=color.white, size=size.small)
+plotshape(isAllowedTf and goShort and strongSell, title="GK SELL STRONG", text="SELL\nStrong", style=shape.labeldown, location=location.abovebar, color=color.orange, textcolor=color.white, size=size.small)
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// RISK PANEL
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+var table riskTable = table.new(position.top_right, 2, 7, border_width=1)
+if showRiskPanel and barstate.islast
+    status = not isAllowedTf ? "USE 1M CHART" : dailyLossHit ? "STOP: Daily Loss" : streakHit ? "STOP: Loss Streak" : dailyTradesHit ? "STOP: Max Trades" : not inSession ? "Out Of Session" : not volOk ? "Wait: Volatility" : "ACTIVE"
+    statusColor = status == "ACTIVE" ? color.new(color.green, 20) : color.new(color.red, 20)
+    cellBg = color.new(color.blue, 30)
+    table.cell(riskTable, 0, 0, "RISK", text_color=color.white, bgcolor=color.black)
+    table.cell(riskTable, 1, 0, status, text_color=color.white, bgcolor=statusColor)
+    table.cell(riskTable, 0, 1, "Equity", text_color=color.white, bgcolor=cellBg)
+    table.cell(riskTable, 1, 1, "$" + str.tostring(strategy.equity, "#,###.00"), text_color=color.white, bgcolor=cellBg)
+    table.cell(riskTable, 0, 2, "Today P&L", text_color=color.white, bgcolor=cellBg)
+    table.cell(riskTable, 1, 2, str.tostring(dayPnL, "#,###.00") + " (" + str.tostring(dayPnLPct, "#.##") + "%)", text_color=color.white, bgcolor=dayPnL >= 0 ? color.new(color.green, 40) : color.new(color.red, 40))
+    table.cell(riskTable, 0, 3, "Trades Today", text_color=color.white, bgcolor=cellBg)
+    table.cell(riskTable, 1, 3, str.tostring(tradesToday) + (maxDailyTrades > 0 ? " / " + str.tostring(maxDailyTrades) : ""), text_color=color.white, bgcolor=cellBg)
+    table.cell(riskTable, 0, 4, "Loss Streak", text_color=color.white, bgcolor=cellBg)
+    table.cell(riskTable, 1, 4, str.tostring(lossStreak), text_color=color.white, bgcolor=cellBg)
+    table.cell(riskTable, 0, 5, "15M Trend", text_color=color.white, bgcolor=cellBg)
+    table.cell(riskTable, 1, 5, trendUp ? "UP" : trendDown ? "DOWN" : "-", text_color=color.white, bgcolor=trendUp ? color.new(color.green, 40) : color.new(color.red, 40))
+    table.cell(riskTable, 0, 6, "Next Lot / Risk", text_color=color.white, bgcolor=cellBg)
+    table.cell(riskTable, 1, 6, str.tostring(longLots, "#.##") + " / $" + str.tostring(longLots * contractSize * longSlDist, "#,###.00"), text_color=color.white, bgcolor=cellBg)

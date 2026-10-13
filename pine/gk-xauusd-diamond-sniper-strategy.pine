@@ -245,14 +245,14 @@ if goLong and canLong and riskOk and longLots >= 0.01
     longSL := close - longSlDist
     longTP := close + longSlDist * rrRatio
     longBest := close
-    strategy.entry("GK BUY", strategy.long, qty=longLots * contractSize, comment=strongBuy ? "BUY Strong" : "BUY")
+    strategy.entry("GK BUY", strategy.long, qty=longLots * contractSize, comment=strongBuy ? "BUY Strong" : "BUY", alert_message="GK BUY XAUUSD | Lot " + str.tostring(longLots, "#.##") + " | Entry ~" + str.tostring(close, "#.##") + " | SL " + str.tostring(longSL, "#.##") + " | TP " + str.tostring(longTP, "#.##"))
 
 if goShort and canShort and riskOk and shortLots >= 0.01
     shortRisk := shortSlDist
     shortSL := close + shortSlDist
     shortTP := close - shortSlDist * rrRatio
     shortBest := close
-    strategy.entry("GK SELL", strategy.short, qty=shortLots * contractSize, comment=strongSell ? "SELL Strong" : "SELL")
+    strategy.entry("GK SELL", strategy.short, qty=shortLots * contractSize, comment=strongSell ? "SELL Strong" : "SELL", alert_message="GK SELL XAUUSD | Lot " + str.tostring(shortLots, "#.##") + " | Entry ~" + str.tostring(close, "#.##") + " | SL " + str.tostring(shortSL, "#.##") + " | TP " + str.tostring(shortTP, "#.##"))
 
 // breakeven + ATR trail, ratcheted on each closed bar (SL only ever tightens)
 if strategy.position_size > 0
@@ -273,8 +273,8 @@ if strategy.position_size < 0
     if useTrail and gain >= shortRisk * trailAtR
         shortSL := math.min(shortSL, shortBest + atr * trailATR)
 
-strategy.exit("XL", from_entry="GK BUY", limit=longTP, stop=longSL, comment_profit="TP", comment_loss="SL")
-strategy.exit("XS", from_entry="GK SELL", limit=shortTP, stop=shortSL, comment_profit="TP", comment_loss="SL")
+strategy.exit("XL", from_entry="GK BUY", limit=longTP, stop=longSL, comment_profit="TP", comment_loss="SL", alert_message="GK BUY closed XAUUSD | SL now " + str.tostring(longSL, "#.##"))
+strategy.exit("XS", from_entry="GK SELL", limit=shortTP, stop=shortSL, comment_profit="TP", comment_loss="SL", alert_message="GK SELL closed XAUUSD | SL now " + str.tostring(shortSL, "#.##"))
 
 // time exit
 if maxBarsInTrade > 0 and strategy.position_size != 0
