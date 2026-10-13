@@ -1,5 +1,5 @@
 //@version=6
-strategy("GK XAUUSD Sniper — Backtest", overlay=true, initial_capital=10000, default_qty_type=strategy.fixed, default_qty_value=100, commission_type=strategy.commission.cash_per_contract, commission_value=0.0, slippage=0, pyramiding=0, process_orders_on_close=false, calc_on_every_tick=false, max_labels_count=500)
+strategy("GK XAUUSD Sniper — Backtest", overlay=true, initial_capital=10000, default_qty_type=strategy.fixed, default_qty_value=100, commission_type=strategy.commission.cash_per_contract, commission_value=0.0, slippage=0, pyramiding=0, process_orders_on_close=false, calc_on_every_tick=false, margin_long=1, margin_short=1, max_labels_count=500)
 
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // SIGNAL INPUTS (same as indicator)
@@ -198,7 +198,7 @@ plot(strategy.position_size < 0 ? shortSL : na, "Short SL", color.red, 1, plot.s
 
 barcolor(isAllowedTf and (gkBuy or gkSell) ? color.rgb(0, 255, 255) : na)
 
-plotshape(cleanBuy, title="GK BUY", text="GK BUY", style=shape.labelup, location=location.belowbar, color=color.green, textcolor=color.white, size=size.small)
-plotshape(cleanSell, title="GK SELL", text="GK SELL", style=shape.labeldown, location=location.abovebar, color=color.red, textcolor=color.white, size=size.small)
-plotshape(strongBuy, title="GK BUY STRONG", text="BUY\nStrong", style=shape.labelup, location=location.belowbar, color=color.orange, textcolor=color.white, size=size.small)
-plotshape(strongSell, title="GK SELL STRONG", text="SELL\nStrong", style=shape.labeldown, location=location.abovebar, color=color.orange, textcolor=color.white, size=size.small)
+plotshape(isAllowedTf and cleanBuy, title="GK BUY", text="GK BUY", style=shape.labelup, location=location.belowbar, color=color.green, textcolor=color.white, size=size.small)
+plotshape(isAllowedTf and cleanSell, title="GK SELL", text="GK SELL", style=shape.labeldown, location=location.abovebar, color=color.red, textcolor=color.white, size=size.small)
+plotshape(isAllowedTf and strongBuy, title="GK BUY STRONG", text="BUY\nStrong", style=shape.labelup, location=location.belowbar, color=color.orange, textcolor=color.white, size=size.small)
+plotshape(isAllowedTf and strongSell, title="GK SELL STRONG", text="SELL\nStrong", style=shape.labeldown, location=location.abovebar, color=color.orange, textcolor=color.white, size=size.small)
