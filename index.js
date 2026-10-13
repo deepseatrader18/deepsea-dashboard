@@ -8,6 +8,7 @@ const { analyzeNewsImpact } = require('./trading/newsImpact');
 const { getTechnicalAnalysis, getMultiTimeframeTechnical } = require('./trading/technical');
 const { runTradingPipeline } = require('./trading/pipeline');
 const { sendTelegramAlert, formatTradeAlert, formatTradingViewAlert } = require('./trading/telegramAlert');
+const { startTradingViewEmailForwarder } = require('./trading/tradingviewEmail');
 const { recordTrade, checkOpenTrades, getTradeLog } = require('./trading/tradeJournal');
 const cryptoTeamStore = require('./trading/cryptoTeamStore');
 const goldScalperStore = require('./trading/goldScalperStore');
@@ -955,6 +956,9 @@ async function scanVolumeSurges() {
 
 setInterval(scanVolumeSurges, VOLUME_SCAN_INTERVAL_MS);
 scanVolumeSurges();
+
+// Free-plan TradingView alerts arrive by email -> forwarded to Telegram.
+startTradingViewEmailForwarder(ENV);
 
 function getVolumeAlertsSince(sinceRaw) {
   const since = parseInt(sinceRaw, 10) || 0;
