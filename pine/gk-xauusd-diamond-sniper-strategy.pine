@@ -1,5 +1,5 @@
 //@version=6
-strategy("GK XAUUSD Sniper — Backtest", overlay=true, initial_capital=10000, default_qty_type=strategy.fixed, default_qty_value=100, commission_type=strategy.commission.cash_per_contract, commission_value=0.0, slippage=0, pyramiding=0, process_orders_on_close=false, calc_on_every_tick=false, margin_long=0.1, margin_short=0.1, max_labels_count=500)
+strategy("GK XAUUSD Sniper — Backtest", overlay=true, initial_capital=10000, default_qty_type=strategy.fixed, default_qty_value=1, commission_type=strategy.commission.cash_per_contract, commission_value=0.0, slippage=0, pyramiding=0, process_orders_on_close=false, calc_on_every_tick=false, margin_long=0.1, margin_short=0.1, max_labels_count=500)
 
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // SIGNAL INPUTS (same as indicator)
@@ -28,9 +28,9 @@ htfSlopeATR = input.float(0.035, "1H Strong Trend Slope ATR", step=0.005)
 // BACKTEST INPUTS
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 grpBt = "Backtest"
-sizingMode = input.string("Risk %", "Position Sizing", options=["Risk %", "Fixed Lot"], group=grpBt)
+sizingMode = input.string("Fixed Lot", "Position Sizing", options=["Risk %", "Fixed Lot"], group=grpBt)
 riskPct = input.float(1.0, "Risk Per Trade (% of equity)", minval=0.05, maxval=10, step=0.05, group=grpBt)
-lotSize = input.float(1.0, "Fixed Lot Size", minval=0.01, step=0.01, group=grpBt)
+lotSize = input.float(0.01, "Fixed Lot Size", minval=0.01, step=0.01, group=grpBt)
 maxLot = input.float(5.0, "Max Lot Cap", minval=0.01, step=0.01, group=grpBt)
 contractSize = input.float(100.0, "Contract Size (oz per 1 lot)", minval=1, group=grpBt)
 slMode = input.string("Fixed $", "Stop Loss Mode", options=["Fixed $", "ATR"], group=grpBt)
