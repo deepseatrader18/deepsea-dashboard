@@ -1,5 +1,5 @@
 //@version=6
-strategy("GK XAUUSD Sniper — Backtest", overlay=true, initial_capital=10000, default_qty_type=strategy.fixed, default_qty_value=1, commission_type=strategy.commission.cash_per_contract, commission_value=0.0, slippage=0, pyramiding=0, process_orders_on_close=false, calc_on_every_tick=false, max_labels_count=500)
+strategy("GK XAUUSD Sniper — Backtest", overlay=true, initial_capital=10000, default_qty_type=strategy.fixed, default_qty_value=100, commission_type=strategy.commission.cash_per_contract, commission_value=0.0, slippage=0, pyramiding=0, process_orders_on_close=false, calc_on_every_tick=false, max_labels_count=500)
 
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // SIGNAL INPUTS (same as indicator)
@@ -28,6 +28,9 @@ htfSlopeATR = input.float(0.035, "1H Strong Trend Slope ATR", step=0.005)
 // BACKTEST INPUTS
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 grpBt = "Backtest"
+lotSize = input.float(1.0, "Lot Size", minval=0.01, step=0.01, group=grpBt)
+contractSize = input.float(100.0, "Contract Size (oz per 1 lot)", minval=1, group=grpBt)
+orderQty = lotSize * contractSize
 tpMove = input.float(10.0, "Take Profit ($ move)", step=0.1, group=grpBt)
 slMode = input.string("Fixed $", "Stop Loss Mode", options=["Fixed $", "ATR", "None"], group=grpBt)
 slMove = input.float(10.0, "Stop Loss ($ move)", step=0.1, group=grpBt)
@@ -153,12 +156,12 @@ canShort = strategy.position_size == 0 or (strategy.position_size > 0 and exitOn
 if goLong and canLong
     longTP := close + tpMove
     longSL := na(slDist) ? na : close - slDist
-    strategy.entry("GK BUY", strategy.long, comment=strongBuy ? "BUY Strong" : "BUY")
+    strategy.entry("GK BUY", strategy.long, qty=orderQty, comment=strongBuy ? "BUY Strong" : "BUY")
 
 if goShort and canShort
     shortTP := close - tpMove
     shortSL := na(slDist) ? na : close + slDist
-    strategy.entry("GK SELL", strategy.short, comment=strongSell ? "SELL Strong" : "SELL")
+    strategy.entry("GK SELL", strategy.short, qty=orderQty, comment=strongSell ? "SELL Strong" : "SELL")
 
 strategy.exit("XL", from_entry="GK BUY", limit=longTP, stop=longSL, comment_profit="TP", comment_loss="SL")
 strategy.exit("XS", from_entry="GK SELL", limit=shortTP, stop=shortSL, comment_profit="TP", comment_loss="SL")
