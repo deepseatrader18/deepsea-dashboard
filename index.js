@@ -7,7 +7,7 @@ const { getForexFactoryNews, getEconomicCalendar } = require('./trading/news');
 const { analyzeNewsImpact } = require('./trading/newsImpact');
 const { getTechnicalAnalysis, getMultiTimeframeTechnical } = require('./trading/technical');
 const { runTradingPipeline } = require('./trading/pipeline');
-const { sendTelegramAlert, formatTradeAlert } = require('./trading/telegramAlert');
+const { sendTelegramAlert, formatTradeAlert, formatTradingViewAlert } = require('./trading/telegramAlert');
 const { recordTrade, checkOpenTrades, getTradeLog } = require('./trading/tradeJournal');
 const cryptoTeamStore = require('./trading/cryptoTeamStore');
 const goldScalperStore = require('./trading/goldScalperStore');
@@ -49,6 +49,9 @@ const CRYPTO_BRIDGE_TOKEN = process.env.CRYPTO_BRIDGE_TOKEN;
 // runs in the owner's own MT5 terminal (not on Render) and pushes trade/status
 // events in over its own shared secret, unrelated to the other bridge tokens.
 const GOLD_SCALPER_BRIDGE_TOKEN = process.env.GOLD_SCALPER_BRIDGE_TOKEN;
+// Shared secret for TradingView alert webhooks. TradingView can't send custom
+// headers, so it goes in the webhook URL (?token=...) or the alert JSON.
+const TRADINGVIEW_WEBHOOK_TOKEN = process.env.TRADINGVIEW_WEBHOOK_TOKEN;
 
 const ENV = {
   VPS_STATUS_URL, VPS_STATUS_KEY, GMAIL_USER, GMAIL_APP_PASSWORD,
@@ -160,6 +163,29 @@ app.get('/api/test-telegram', requireAuth, async (req, res) => {
   }
   const result = await sendTelegramAlert(ENV, '✅ DeepSea test message — if you can see this, Telegram alerts are working.');
   res.json(result);
+});
+
+// TradingView webhook -> Telegram. Set the alert's Webhook URL to
+// https://<render-host>/api/tradingview/webhook?token=<TRADINGVIEW_WEBHOOK_TOKEN>
+// and every strategy/indicator alert is forwarded to the Telegram chat.
+// TradingView posts text/plain unless the message is valid JSON, so the raw
+// text body is accepted too.
+app.post('/api/tradingview/webhook', express.text({ type: 'text/*' }), async (req, res) => {
+  if (!TRADINGVIEW_WEBHOOK_TOKEN) return res.status(500).json({ error: 'TRADINGVIEW_WEBHOOK_TOKEN not set on server' });
+  let payload = req.body;
+  if (typeof payload === 'string') {
+    try { payload = JSON.parse(payload); } catch (_) { /* plain-text alert */ }
+  }
+  const bodyToken = payload && typeof payload === 'object' ? (payload.token || payload.secret) : undefined;
+  const token = req.query.token || bodyToken;
+  if (token !== TRADINGVIEW_WEBHOOK_TOKEN) return res.status(401).json({ error: 'unauthorized' });
+  if (payload && typeof payload === 'object') {
+    payload = { ...payload };
+    delete payload.token;
+    delete payload.secret;
+  }
+  const result = await sendTelegramAlert(ENV, formatTradingViewAlert(payload));
+  res.status(result.ok ? 200 : 502).json(result);
 });
 
 // Free, lifetime, neural-quality TTS (same voices as Azure Cognitive
