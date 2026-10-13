@@ -35,6 +35,10 @@ tpMove = input.float(10.0, "Take Profit ($ move)", step=0.1, group=grpBt)
 slMode = input.string("Fixed $", "Stop Loss Mode", options=["Fixed $", "ATR", "None"], group=grpBt)
 slMove = input.float(10.0, "Stop Loss ($ move)", step=0.1, group=grpBt)
 slAtrMult = input.float(1.5, "Stop Loss ATR Mult", step=0.1, group=grpBt)
+useTrail = input.bool(true, "Use Trailing SL", group=grpBt)
+trailStart = input.float(5.0, "Trail Starts After Profit ($ move)", minval=0, step=0.1, group=grpBt)
+trailOffset = input.float(3.0, "Trail Distance ($ move)", minval=0.01, step=0.1, group=grpBt)
+keepTP = input.bool(true, "Keep Fixed TP With Trailing", group=grpBt)
 exitOnOpposite = input.bool(true, "Close & Reverse On Opposite Signal", group=grpBt)
 maxBarsInTrade = input.int(0, "Max Bars In Trade (0 = off)", minval=0, group=grpBt)
 signalFilter = input.string("All", "Signals To Trade", options=["All", "Clean Only", "Strong Only"], group=grpBt)
@@ -163,8 +167,14 @@ if goShort and canShort
     shortSL := na(slDist) ? na : close + slDist
     strategy.entry("GK SELL", strategy.short, qty=orderQty, comment=strongSell ? "SELL Strong" : "SELL")
 
-strategy.exit("XL", from_entry="GK BUY", limit=longTP, stop=longSL, comment_profit="TP", comment_loss="SL")
-strategy.exit("XS", from_entry="GK SELL", limit=shortTP, stop=shortSL, comment_profit="TP", comment_loss="SL")
+// trailing SL: arms once price moves trailStart in profit, then follows price at trailOffset
+trailPts = useTrail ? math.max(trailStart, syminfo.mintick) / syminfo.mintick : na
+trailOff = useTrail ? trailOffset / syminfo.mintick : na
+exitLongTP = useTrail and not keepTP ? na : longTP
+exitShortTP = useTrail and not keepTP ? na : shortTP
+
+strategy.exit("XL", from_entry="GK BUY", limit=exitLongTP, stop=longSL, trail_points=trailPts, trail_offset=trailOff, comment_profit="TP", comment_loss="SL", comment_trailing="Trail")
+strategy.exit("XS", from_entry="GK SELL", limit=exitShortTP, stop=shortSL, trail_points=trailPts, trail_offset=trailOff, comment_profit="TP", comment_loss="SL", comment_trailing="Trail")
 
 // time exit
 if maxBarsInTrade > 0 and strategy.position_size != 0
@@ -181,9 +191,9 @@ if useDate and time > endTime
 lineColor = bullLine ? color.lime : bearLine ? color.red : color.orange
 plot(isAllowedTf ? mainLine : na, title="GK Main Line", color=lineColor, linewidth=3)
 
-plot(strategy.position_size > 0 ? longTP : na, "Long TP", color.green, 1, plot.style_linebr)
+plot(strategy.position_size > 0 ? exitLongTP : na, "Long TP", color.green, 1, plot.style_linebr)
 plot(strategy.position_size > 0 ? longSL : na, "Long SL", color.red, 1, plot.style_linebr)
-plot(strategy.position_size < 0 ? shortTP : na, "Short TP", color.green, 1, plot.style_linebr)
+plot(strategy.position_size < 0 ? exitShortTP : na, "Short TP", color.green, 1, plot.style_linebr)
 plot(strategy.position_size < 0 ? shortSL : na, "Short SL", color.red, 1, plot.style_linebr)
 
 barcolor(isAllowedTf and (gkBuy or gkSell) ? color.rgb(0, 255, 255) : na)
