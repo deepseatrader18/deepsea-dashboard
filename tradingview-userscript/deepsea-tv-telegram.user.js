@@ -16,6 +16,8 @@
 (function () {
   'use strict';
 
+  const DEFAULT_BOT_TOKEN = '';
+  const DEFAULT_CHAT_ID = '';
   const SCAN_INTERVAL_MS = 3000;
   // Switching symbol/timeframe or editing strategy inputs rebuilds the whole
   // trade list — that's not a live trade, so a scan with this many changes
@@ -24,8 +26,10 @@
 
   // ---- Telegram settings (asked once, stored in Tampermonkey) ----
   function getSettings(forceAsk) {
-    let token = GM_getValue('botToken', '');
-    let chatId = GM_getValue('chatId', '');
+    // When installed from the dashboard (/tv-agent.user.js) these defaults
+    // are filled in by the server, so nothing has to be typed.
+    let token = GM_getValue('botToken', '') || DEFAULT_BOT_TOKEN;
+    let chatId = GM_getValue('chatId', '') || DEFAULT_CHAT_ID;
     if (forceAsk || !token) {
       token = (prompt('DeepSea: Telegram BOT TOKEN daaliye', token) || '').trim();
       GM_setValue('botToken', token);

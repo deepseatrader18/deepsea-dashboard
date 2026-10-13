@@ -10,9 +10,11 @@ Yeh ek chhota browser script (agent) hai jo aapke **laptop ke Chrome me khule Tr
 
 1. Chrome me **Tampermonkey** extension install kariye: https://www.tampermonkey.net/
 2. Chrome me `chrome://extensions` kholiye → upar right **Developer mode** ON kariye (Tampermonkey ke naye version ke liye zaroori hai).
-3. Tampermonkey icon → **Create a new script** → jo bhi likha hai sab delete kariye → `deepsea-tv-telegram.user.js` ka poora code paste kariye → **File → Save** (Ctrl+S).
-4. TradingView chart kholiye. Script ek baar **Telegram BOT TOKEN** aur **CHAT ID** poochhega — wahi daaliye jo Render par `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` me hain.
-5. Test: Tampermonkey icon → **Test message bhejo** → Telegram par "✅ DeepSea TradingView agent chal raha hai." aana chahiye.
+3. Usi Chrome me Deep Sea dashboard par login kariye, phir yeh link kholiye: **https://deepsea-dashboard.onrender.com/tv-agent.user.js** → Tampermonkey ka page khulega → **Install** dabaiye.
+   Telegram Bot Token / Chat ID dashboard khud bhar deta hai — kuch type nahi karna.
+4. Test: Tampermonkey icon → **Test message bhejo** → Telegram par "✅ DeepSea TradingView agent chal raha hai." aana chahiye.
+
+(Manual tareeka: Tampermonkey → Create a new script → `deepsea-tv-telegram.user.js` ka code paste → Save. Is tareeke me pehli baar chart kholne par Bot Token aur Chat ID poochha jayega.)
 
 ## Har baar chart par
 

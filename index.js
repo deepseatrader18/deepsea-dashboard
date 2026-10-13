@@ -189,6 +189,18 @@ app.post('/api/tradingview/webhook', express.text({ type: 'text/*' }), async (re
   res.status(result.ok ? 200 : 502).json(result);
 });
 
+// One-click install of the TradingView -> Telegram browser agent: Tampermonkey
+// opens its install page for any URL ending in .user.js. Behind login, since
+// the server fills in the Telegram bot token/chat id so nothing has to be typed.
+app.get('/tv-agent.user.js', requireAuth, (req, res) => {
+  const fs = require('fs');
+  const script = fs.readFileSync(path.join(__dirname, 'tradingview-userscript', 'deepsea-tv-telegram.user.js'), 'utf8')
+    .replace("const DEFAULT_BOT_TOKEN = '';", `const DEFAULT_BOT_TOKEN = ${JSON.stringify(TELEGRAM_BOT_TOKEN || '')};`)
+    .replace("const DEFAULT_CHAT_ID = '';", `const DEFAULT_CHAT_ID = ${JSON.stringify(TELEGRAM_CHAT_ID || '')};`);
+  res.set('Cache-Control', 'no-store');
+  res.type('application/javascript').send(script);
+});
+
 // Free, lifetime, neural-quality TTS (same voices as Azure Cognitive
 // Services) via Microsoft Edge's Read Aloud service — no API key, no usage
 // cost. Used as the fallback voice below if Gemini's own TTS is unavailable
