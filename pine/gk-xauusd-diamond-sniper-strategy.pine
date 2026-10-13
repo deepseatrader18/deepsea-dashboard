@@ -1,5 +1,5 @@
 //@version=6
-strategy("GK XAUUSD Sniper — Backtest", overlay=true, initial_capital=10000, default_qty_type=strategy.fixed, default_qty_value=100, commission_type=strategy.commission.cash_per_contract, commission_value=0.0, slippage=0, pyramiding=0, process_orders_on_close=false, calc_on_every_tick=false, margin_long=1, margin_short=1, max_labels_count=500)
+strategy("GK XAUUSD Sniper — Backtest", overlay=true, initial_capital=10000, default_qty_type=strategy.fixed, default_qty_value=100, commission_type=strategy.commission.cash_per_contract, commission_value=0.0, slippage=0, pyramiding=0, process_orders_on_close=false, calc_on_every_tick=false, margin_long=0.1, margin_short=0.1, max_labels_count=500)
 
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // SIGNAL INPUTS (same as indicator)
