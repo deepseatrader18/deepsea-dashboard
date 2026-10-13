@@ -162,11 +162,6 @@ goLong = isAllowedTf and inDate and allowLong and buyPass
 goShort = isAllowedTf and inDate and allowShort and sellPass
 
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// ORDERS
-// Signal on bar close -> fill on next bar open.
-// TP/SL are measured from the signal candle close (same as the indicator's TP).
-//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // RISK MANAGEMENT — DAILY GUARDS
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 newDay = ta.change(time("D")) != 0
@@ -225,7 +220,6 @@ var float longTP = na
 var float longSL = na
 var float shortTP = na
 var float shortSL = na
-var float lastLots = na
 
 canLong = strategy.position_size == 0 or (strategy.position_size < 0 and exitOnOpposite)
 canShort = strategy.position_size == 0 or (strategy.position_size > 0 and exitOnOpposite)
@@ -233,13 +227,11 @@ canShort = strategy.position_size == 0 or (strategy.position_size > 0 and exitOn
 if goLong and canLong and riskOk and sizeOk
     longTP := close + tpDist
     longSL := close - slDist
-    lastLots := tradeLots
     strategy.entry("GK BUY", strategy.long, qty=orderQty, comment=strongBuy ? "BUY Strong" : "BUY")
 
 if goShort and canShort and riskOk and sizeOk
     shortTP := close - tpDist
     shortSL := close + slDist
-    lastLots := tradeLots
     strategy.entry("GK SELL", strategy.short, qty=orderQty, comment=strongSell ? "SELL Strong" : "SELL")
 
 // breakeven: once price moves beTrigger in profit, pull SL to entry + beLock (never loosens)
