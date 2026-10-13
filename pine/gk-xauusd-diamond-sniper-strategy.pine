@@ -28,13 +28,17 @@ htfSlopeATR = input.float(0.035, "1H Strong Trend Slope ATR", step=0.005)
 // BACKTEST INPUTS
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 grpBt = "Backtest"
-lotSize = input.float(1.0, "Lot Size", minval=0.01, step=0.01, group=grpBt)
+sizingMode = input.string("Risk %", "Position Sizing", options=["Risk %", "Fixed Lot"], group=grpBt)
+riskPct = input.float(1.0, "Risk Per Trade (% of equity)", minval=0.05, maxval=10, step=0.05, group=grpBt)
+lotSize = input.float(1.0, "Fixed Lot Size", minval=0.01, step=0.01, group=grpBt)
+maxLot = input.float(5.0, "Max Lot Cap", minval=0.01, step=0.01, group=grpBt)
 contractSize = input.float(100.0, "Contract Size (oz per 1 lot)", minval=1, group=grpBt)
-orderQty = lotSize * contractSize
-tpMove = input.float(10.0, "Take Profit ($ move)", step=0.1, group=grpBt)
-slMode = input.string("Fixed $", "Stop Loss Mode", options=["Fixed $", "ATR", "None"], group=grpBt)
-slMove = input.float(10.0, "Stop Loss ($ move)", step=0.1, group=grpBt)
-slAtrMult = input.float(1.5, "Stop Loss ATR Mult", step=0.1, group=grpBt)
+slMode = input.string("Fixed $", "Stop Loss Mode", options=["Fixed $", "ATR"], group=grpBt)
+slMove = input.float(10.0, "Stop Loss ($ move)", minval=0.1, step=0.1, group=grpBt)
+slAtrMult = input.float(1.5, "Stop Loss ATR Mult", minval=0.1, step=0.1, group=grpBt)
+tpMode = input.string("Fixed $", "Take Profit Mode", options=["Fixed $", "R:R"], group=grpBt)
+tpMove = input.float(10.0, "Take Profit ($ move)", minval=0.1, step=0.1, group=grpBt)
+rrRatio = input.float(1.5, "Take Profit R:R", minval=0.1, step=0.1, group=grpBt)
 useTrail = input.bool(true, "Use Trailing SL", group=grpBt)
 trailStart = input.float(5.0, "Trail Starts After Profit ($ move)", minval=0, step=0.1, group=grpBt)
 trailOffset = input.float(3.0, "Trail Distance ($ move)", minval=0.01, step=0.1, group=grpBt)
@@ -50,6 +54,21 @@ useDate = input.bool(false, "Limit Date Range", group=grpDate)
 startTime = input.time(timestamp("2025-01-01T00:00:00"), "Start", group=grpDate)
 endTime = input.time(timestamp("2099-01-01T00:00:00"), "End", group=grpDate)
 inDate = not useDate or (time >= startTime and time <= endTime)
+
+grpRisk = "Risk Management"
+useBE = input.bool(true, "Move SL To Breakeven", group=grpRisk)
+beTrigger = input.float(4.0, "Breakeven After Profit ($ move)", minval=0.1, step=0.1, group=grpRisk)
+beLock = input.float(0.5, "Breakeven Lock-In ($ above entry)", minval=0, step=0.1, group=grpRisk)
+maxDailyLossPct = input.float(3.0, "Max Daily Loss % (0 = off)", minval=0, step=0.5, group=grpRisk)
+maxDailyTrades = input.int(10, "Max Trades Per Day (0 = off)", minval=0, group=grpRisk)
+maxLossStreak = input.int(3, "Stop For Day After X Losses In A Row (0 = off)", minval=0, group=grpRisk)
+maxDDPct = input.float(20.0, "Stop Strategy At Max Drawdown % (0 = off)", minval=0, step=1, group=grpRisk)
+useSession = input.bool(false, "Trade Only In Session", group=grpRisk)
+sessionStr = input.session("0700-2000", "Session (chart timezone)", group=grpRisk)
+closeEndOfDay = input.bool(false, "Close Open Trade At Session End", group=grpRisk)
+showRiskPanel = input.bool(true, "Show Risk Panel", group=grpRisk)
+
+strategy.risk.max_drawdown(maxDDPct > 0 ? maxDDPct : 100, strategy.percent_of_equity)
 
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // TIMEFRAME LOCK
@@ -147,25 +166,87 @@ goShort = isAllowedTf and inDate and allowShort and sellPass
 // Signal on bar close -> fill on next bar open.
 // TP/SL are measured from the signal candle close (same as the indicator's TP).
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-slDist = slMode == "Fixed $" ? slMove : slMode == "ATR" ? atr * slAtrMult : na
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// RISK MANAGEMENT — DAILY GUARDS
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+newDay = ta.change(time("D")) != 0
+totalTrades = strategy.closedtrades + strategy.opentrades
 
+var float dayStartEquity = strategy.initial_capital
+var int dayStartTrades = 0
+var int lossStreak = 0
+var int lastClosedCount = 0
+
+if newDay
+    dayStartEquity := strategy.equity
+    dayStartTrades := totalTrades
+    lossStreak := 0
+
+if strategy.closedtrades > lastClosedCount
+    for i = lastClosedCount to strategy.closedtrades - 1
+        lossStreak := strategy.closedtrades.profit(i) < 0 ? lossStreak + 1 : 0
+    lastClosedCount := strategy.closedtrades
+
+dayPnL = strategy.equity - dayStartEquity
+dayPnLPct = dayStartEquity > 0 ? dayPnL / dayStartEquity * 100 : 0.0
+tradesToday = totalTrades - dayStartTrades
+
+dailyLossHit = maxDailyLossPct > 0 and dayPnLPct <= -maxDailyLossPct
+dailyTradesHit = maxDailyTrades > 0 and tradesToday >= maxDailyTrades
+streakHit = maxLossStreak > 0 and lossStreak >= maxLossStreak
+
+inSession = not useSession or not na(time(timeframe.period, sessionStr))
+riskOk = not dailyLossHit and not dailyTradesHit and not streakHit and inSession
+
+if dailyLossHit and strategy.position_size != 0
+    strategy.close_all(comment="Daily Loss")
+
+if useSession and closeEndOfDay and not inSession and strategy.position_size != 0
+    strategy.close_all(comment="Session End")
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// POSITION SIZE (risk % of equity / SL distance)
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+slDist = slMode == "Fixed $" ? slMove : atr * slAtrMult
+tpDist = tpMode == "R:R" ? slDist * rrRatio : tpMove
+
+riskLots = (strategy.equity * riskPct / 100) / (slDist * contractSize)
+calcLots = sizingMode == "Risk %" ? math.floor(riskLots * 100) / 100 : lotSize
+tradeLots = math.min(calcLots, maxLot)
+orderQty = tradeLots * contractSize
+sizeOk = tradeLots >= 0.01
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ORDERS
+// Signal on bar close -> fill on next bar open.
+// TP/SL are measured from the signal candle close (same as the indicator's TP).
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 var float longTP = na
 var float longSL = na
 var float shortTP = na
 var float shortSL = na
+var float lastLots = na
 
 canLong = strategy.position_size == 0 or (strategy.position_size < 0 and exitOnOpposite)
 canShort = strategy.position_size == 0 or (strategy.position_size > 0 and exitOnOpposite)
 
-if goLong and canLong
-    longTP := close + tpMove
-    longSL := na(slDist) ? na : close - slDist
+if goLong and canLong and riskOk and sizeOk
+    longTP := close + tpDist
+    longSL := close - slDist
+    lastLots := tradeLots
     strategy.entry("GK BUY", strategy.long, qty=orderQty, comment=strongBuy ? "BUY Strong" : "BUY")
 
-if goShort and canShort
-    shortTP := close - tpMove
-    shortSL := na(slDist) ? na : close + slDist
+if goShort and canShort and riskOk and sizeOk
+    shortTP := close - tpDist
+    shortSL := close + slDist
+    lastLots := tradeLots
     strategy.entry("GK SELL", strategy.short, qty=orderQty, comment=strongSell ? "SELL Strong" : "SELL")
+
+// breakeven: once price moves beTrigger in profit, pull SL to entry + beLock (never loosens)
+if useBE and strategy.position_size > 0 and high - strategy.position_avg_price >= beTrigger
+    longSL := math.max(longSL, strategy.position_avg_price + beLock)
+if useBE and strategy.position_size < 0 and strategy.position_avg_price - low >= beTrigger
+    shortSL := math.min(shortSL, strategy.position_avg_price - beLock)
 
 // trailing SL: arms once price moves trailStart in profit, then follows price at trailOffset
 trailPts = useTrail ? math.max(trailStart, syminfo.mintick) / syminfo.mintick : na
@@ -202,3 +283,23 @@ plotshape(isAllowedTf and cleanBuy, title="GK BUY", text="GK BUY", style=shape.l
 plotshape(isAllowedTf and cleanSell, title="GK SELL", text="GK SELL", style=shape.labeldown, location=location.abovebar, color=color.red, textcolor=color.white, size=size.small)
 plotshape(isAllowedTf and strongBuy, title="GK BUY STRONG", text="BUY\nStrong", style=shape.labelup, location=location.belowbar, color=color.orange, textcolor=color.white, size=size.small)
 plotshape(isAllowedTf and strongSell, title="GK SELL STRONG", text="SELL\nStrong", style=shape.labeldown, location=location.abovebar, color=color.orange, textcolor=color.white, size=size.small)
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// RISK PANEL
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+var table riskTable = table.new(position.top_right, 2, 6, border_width=1)
+if showRiskPanel and barstate.islast
+    status = dailyLossHit ? "STOP: Daily Loss" : streakHit ? "STOP: Loss Streak" : dailyTradesHit ? "STOP: Max Trades" : not inSession ? "Out Of Session" : "ACTIVE"
+    statusColor = status == "ACTIVE" ? color.new(color.green, 20) : color.new(color.red, 20)
+    table.cell(riskTable, 0, 0, "RISK", text_color=color.white, bgcolor=color.black)
+    table.cell(riskTable, 1, 0, status, text_color=color.white, bgcolor=statusColor)
+    table.cell(riskTable, 0, 1, "Equity", text_color=color.white, bgcolor=color.new(color.blue, 30))
+    table.cell(riskTable, 1, 1, "$" + str.tostring(strategy.equity, "#,###.00"), text_color=color.white, bgcolor=color.new(color.blue, 30))
+    table.cell(riskTable, 0, 2, "Today P&L", text_color=color.white, bgcolor=color.new(color.blue, 30))
+    table.cell(riskTable, 1, 2, str.tostring(dayPnL, "#,###.00") + " (" + str.tostring(dayPnLPct, "#.##") + "%)", text_color=color.white, bgcolor=dayPnL >= 0 ? color.new(color.green, 40) : color.new(color.red, 40))
+    table.cell(riskTable, 0, 3, "Trades Today", text_color=color.white, bgcolor=color.new(color.blue, 30))
+    table.cell(riskTable, 1, 3, str.tostring(tradesToday) + (maxDailyTrades > 0 ? " / " + str.tostring(maxDailyTrades) : ""), text_color=color.white, bgcolor=color.new(color.blue, 30))
+    table.cell(riskTable, 0, 4, "Loss Streak", text_color=color.white, bgcolor=color.new(color.blue, 30))
+    table.cell(riskTable, 1, 4, str.tostring(lossStreak), text_color=color.white, bgcolor=color.new(color.blue, 30))
+    table.cell(riskTable, 0, 5, "Next Lot", text_color=color.white, bgcolor=color.new(color.blue, 30))
+    table.cell(riskTable, 1, 5, str.tostring(tradeLots, "#.##") + " (risk $" + str.tostring(tradeLots * contractSize * slDist, "#,###") + ")", text_color=color.white, bgcolor=color.new(color.blue, 30))
