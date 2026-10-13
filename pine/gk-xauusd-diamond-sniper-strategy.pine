@@ -1,0 +1,191 @@
+//@version=6
+strategy("GK XAUUSD Sniper — Backtest", overlay=true, initial_capital=10000, default_qty_type=strategy.fixed, default_qty_value=1, commission_type=strategy.commission.cash_per_contract, commission_value=0.0, slippage=0, pyramiding=0, process_orders_on_close=false, calc_on_every_tick=false, max_labels_count=500)
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// SIGNAL INPUTS (same as indicator)
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+mainLen = input.int(34, "Main Trend Length", minval=2)
+fastLen = input.int(13, "Fast Trigger Length", minval=2)
+atrLen = input.int(14, "ATR Length", minval=1)
+
+rangeLookback = input.int(20, "Range Lookback", minval=5)
+noPrintRangePips = input.float(30.0, "No Print Range Size ($)", step=0.5)
+breakBufferPips = input.float(2.5, "Breakout Buffer ($)", step=0.1)
+
+minSepATR = input.float(0.08, "Min Line Separation ATR", step=0.01)
+minSlopeATR = input.float(0.045, "Min Main Slope ATR", step=0.005)
+minCandleATR = input.float(0.30, "Min Candle Range ATR", step=0.01)
+lineBlockATR = input.float(0.35, "Too Close To Line Block ATR", step=0.01)
+
+cooldownBars = input.int(10, "Cooldown Bars After Print", minval=1)
+
+htfTf = input.timeframe("60", "Strong Context HTF")
+htfLen = input.int(50, "1H Trend Strength Length", minval=5)
+htfSlopeLookback = input.int(2, "1H Slope Lookback", minval=1)
+htfSlopeATR = input.float(0.035, "1H Strong Trend Slope ATR", step=0.005)
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// BACKTEST INPUTS
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+grpBt = "Backtest"
+tpMove = input.float(10.0, "Take Profit ($ move)", step=0.1, group=grpBt)
+slMode = input.string("Fixed $", "Stop Loss Mode", options=["Fixed $", "ATR", "None"], group=grpBt)
+slMove = input.float(10.0, "Stop Loss ($ move)", step=0.1, group=grpBt)
+slAtrMult = input.float(1.5, "Stop Loss ATR Mult", step=0.1, group=grpBt)
+exitOnOpposite = input.bool(true, "Close & Reverse On Opposite Signal", group=grpBt)
+maxBarsInTrade = input.int(0, "Max Bars In Trade (0 = off)", minval=0, group=grpBt)
+signalFilter = input.string("All", "Signals To Trade", options=["All", "Clean Only", "Strong Only"], group=grpBt)
+tradeDir = input.string("Both", "Direction", options=["Both", "Long Only", "Short Only"], group=grpBt)
+lockTf = input.bool(true, "Only Trade On 5/15/20/25/30M", group=grpBt)
+
+grpDate = "Date Range"
+useDate = input.bool(false, "Limit Date Range", group=grpDate)
+startTime = input.time(timestamp("2025-01-01T00:00:00"), "Start", group=grpDate)
+endTime = input.time(timestamp("2099-01-01T00:00:00"), "End", group=grpDate)
+inDate = not useDate or (time >= startTime and time <= endTime)
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// TIMEFRAME LOCK
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+isAllowedTf = not lockTf or timeframe.period == "5" or timeframe.period == "15" or timeframe.period == "20" or timeframe.period == "25" or timeframe.period == "30"
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ZLEMA ENGINE
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+lagMain = int(math.floor((mainLen - 1) / 2))
+mainAdj = lagMain > 0 ? close + (close - close[lagMain]) : close
+mainLine = ta.ema(mainAdj, mainLen)
+
+lagFast = int(math.floor((fastLen - 1) / 2))
+fastAdj = lagFast > 0 ? close + (close - close[lagFast]) : close
+fastLine = ta.ema(fastAdj, fastLen)
+
+atr = ta.atr(atrLen)
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// RANGE / CHOP FILTER
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+rangeHigh = ta.highest(high, rangeLookback)[1]
+rangeLow = ta.lowest(low, rangeLookback)[1]
+rangeSize = rangeHigh - rangeLow
+
+insideCompression = rangeSize <= noPrintRangePips and close <= rangeHigh and close >= rangeLow
+rangeBreakBuy = close > rangeHigh + breakBufferPips
+rangeBreakSell = close < rangeLow - breakBufferPips
+tooCloseToLine = math.abs(close - mainLine) < atr * lineBlockATR
+allowPrintZone = not insideCompression and not tooCloseToLine
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// TREND + PRESSURE
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+mainSlope = mainLine - mainLine[1]
+sep = math.abs(fastLine - mainLine)
+
+bullLine = fastLine > mainLine and close > mainLine
+bearLine = fastLine < mainLine and close < mainLine
+bullSlope = mainSlope > atr * minSlopeATR
+bearSlope = mainSlope < -atr * minSlopeATR
+sepOk = sep > atr * minSepATR
+candleForce = (high - low) > atr * minCandleATR
+bullPressure = close > high[1] and close > open
+bearPressure = close < low[1] and close < open
+
+rawBuy = allowPrintZone and rangeBreakBuy and bullLine and bullSlope and sepOk and candleForce and bullPressure
+rawSell = allowPrintZone and rangeBreakSell and bearLine and bearSlope and sepOk and candleForce and bearPressure
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 1 PRINT PER TREND + COOLDOWN
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+var int trendLock = 0
+var int lastSignalBar = na
+
+canPrint = na(lastSignalBar) or (bar_index - lastSignalBar >= cooldownBars)
+
+gkBuy = barstate.isconfirmed and rawBuy and trendLock != 1 and canPrint
+gkSell = barstate.isconfirmed and rawSell and trendLock != -1 and canPrint
+
+trendLock := gkBuy ? 1 : gkSell ? -1 : trendLock
+lastSignalBar := gkBuy or gkSell ? bar_index : lastSignalBar
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 1H CONTEXT — NON-REPAINTING (closed 1H bar only)
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+htfClose = request.security(syminfo.tickerid, htfTf, close[1], barmerge.gaps_off, barmerge.lookahead_on)
+htfAtr = request.security(syminfo.tickerid, htfTf, ta.atr(atrLen)[1], barmerge.gaps_off, barmerge.lookahead_on)
+htfLine = request.security(syminfo.tickerid, htfTf, ta.ema(close, htfLen)[1], barmerge.gaps_off, barmerge.lookahead_on)
+htfSlope = request.security(syminfo.tickerid, htfTf, (ta.ema(close, htfLen) - ta.ema(close, htfLen)[htfSlopeLookback])[1], barmerge.gaps_off, barmerge.lookahead_on)
+
+strongBull1H = htfClose > htfLine and htfSlope > htfAtr * htfSlopeATR
+strongBear1H = htfClose < htfLine and htfSlope < -htfAtr * htfSlopeATR
+
+strongBuy = gkBuy and strongBear1H
+strongSell = gkSell and strongBull1H
+cleanBuy = gkBuy and not strongBuy
+cleanSell = gkSell and not strongSell
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ENTRY FILTERS
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+buyPass = signalFilter == "All" ? gkBuy : signalFilter == "Clean Only" ? cleanBuy : strongBuy
+sellPass = signalFilter == "All" ? gkSell : signalFilter == "Clean Only" ? cleanSell : strongSell
+
+allowLong = tradeDir != "Short Only"
+allowShort = tradeDir != "Long Only"
+
+goLong = isAllowedTf and inDate and allowLong and buyPass
+goShort = isAllowedTf and inDate and allowShort and sellPass
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ORDERS
+// Signal on bar close -> fill on next bar open.
+// TP/SL are measured from the signal candle close (same as the indicator's TP).
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+slDist = slMode == "Fixed $" ? slMove : slMode == "ATR" ? atr * slAtrMult : na
+
+var float longTP = na
+var float longSL = na
+var float shortTP = na
+var float shortSL = na
+
+canLong = strategy.position_size == 0 or (strategy.position_size < 0 and exitOnOpposite)
+canShort = strategy.position_size == 0 or (strategy.position_size > 0 and exitOnOpposite)
+
+if goLong and canLong
+    longTP := close + tpMove
+    longSL := na(slDist) ? na : close - slDist
+    strategy.entry("GK BUY", strategy.long, comment=strongBuy ? "BUY Strong" : "BUY")
+
+if goShort and canShort
+    shortTP := close - tpMove
+    shortSL := na(slDist) ? na : close + slDist
+    strategy.entry("GK SELL", strategy.short, comment=strongSell ? "SELL Strong" : "SELL")
+
+strategy.exit("XL", from_entry="GK BUY", limit=longTP, stop=longSL, comment_profit="TP", comment_loss="SL")
+strategy.exit("XS", from_entry="GK SELL", limit=shortTP, stop=shortSL, comment_profit="TP", comment_loss="SL")
+
+// time exit
+if maxBarsInTrade > 0 and strategy.position_size != 0
+    entryBarIdx = strategy.opentrades.entry_bar_index(strategy.opentrades - 1)
+    if bar_index - entryBarIdx >= maxBarsInTrade
+        strategy.close_all(comment="Time")
+
+if useDate and time > endTime
+    strategy.close_all(comment="End")
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// VISUALS
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+lineColor = bullLine ? color.lime : bearLine ? color.red : color.orange
+plot(isAllowedTf ? mainLine : na, title="GK Main Line", color=lineColor, linewidth=3)
+
+plot(strategy.position_size > 0 ? longTP : na, "Long TP", color.green, 1, plot.style_linebr)
+plot(strategy.position_size > 0 ? longSL : na, "Long SL", color.red, 1, plot.style_linebr)
+plot(strategy.position_size < 0 ? shortTP : na, "Short TP", color.green, 1, plot.style_linebr)
+plot(strategy.position_size < 0 ? shortSL : na, "Short SL", color.red, 1, plot.style_linebr)
+
+barcolor(isAllowedTf and (gkBuy or gkSell) ? color.rgb(0, 255, 255) : na)
+
+plotshape(cleanBuy, title="GK BUY", text="GK BUY", style=shape.labelup, location=location.belowbar, color=color.green, textcolor=color.white, size=size.small)
+plotshape(cleanSell, title="GK SELL", text="GK SELL", style=shape.labeldown, location=location.abovebar, color=color.red, textcolor=color.white, size=size.small)
+plotshape(strongBuy, title="GK BUY STRONG", text="BUY\nStrong", style=shape.labelup, location=location.belowbar, color=color.orange, textcolor=color.white, size=size.small)
+plotshape(strongSell, title="GK SELL STRONG", text="SELL\nStrong", style=shape.labeldown, location=location.abovebar, color=color.orange, textcolor=color.white, size=size.small)
