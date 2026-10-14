@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DeepSea · TradingView trades → Telegram
 // @namespace    deepsea-dashboard
-// @version      1.0.0
+// @version      1.1.0
 // @description  Watches the Strategy Tester "List of trades" on your open TradingView chart and sends every new entry/exit to Telegram. Works on the free TradingView plan (no alerts/webhooks needed).
 // @match        https://*.tradingview.com/chart/*
 // @grant        GM_xmlhttpRequest
@@ -41,7 +41,27 @@
     return { token, chatId };
   }
 
+  // ---- SL/TP levels (the strategy draws them only as chart labels, which
+  // the page can't read, so they're rebuilt from the entry price). Defaults
+  // match the "Confirmed candle + S&D + BT&SP" labels on XAUUSD: SL = entry
+  // ± 0.2%, TP1/TP2/TP3 = 0.5R / 1R / 1.5R.
+  function getLevelSettings(forceAsk) {
+    let slPct = GM_getValue('slPct', 0.2);
+    let tpRs = GM_getValue('tpRs', '0.5, 1, 1.5');
+    if (forceAsk) {
+      const a = prompt('DeepSea: SL kitne % door hai entry se? (0 = SL/TP mat bhejo)', String(slPct));
+      if (a !== null && !isNaN(parseFloat(a))) slPct = parseFloat(a);
+      const b = prompt('DeepSea: TP kitne R par hain? (comma se alag, jaise 0.5, 1, 1.5)', tpRs);
+      if (b !== null) tpRs = b;
+      GM_setValue('slPct', slPct);
+      GM_setValue('tpRs', tpRs);
+    }
+    const rs = String(tpRs).split(',').map(x => parseFloat(x)).filter(x => x > 0);
+    return { slPct, rs };
+  }
+
   GM_registerMenuCommand('Telegram settings badlo', () => getSettings(true));
+  GM_registerMenuCommand('SL / TP settings badlo', () => getLevelSettings(true));
   GM_registerMenuCommand('Test message bhejo', () => send('✅ DeepSea TradingView agent chal raha hai.'));
 
   function send(text) {
@@ -103,8 +123,51 @@
     return norm(document.title).split(' ')[0] || 'Chart';
   }
 
+  const toNum = s => parseFloat(s.replace(/,/g, ''));
+
+  // Current price from the tab title ("XAUUSD 4,161.540 ▲ ..."), used to tell
+  // the entry price apart from dates, quantities and P&L in the trade row.
+  function chartPrice() {
+    const m = norm(document.title).match(/\d[\d,]*\.\d+/);
+    return m ? toNum(m[0]) : NaN;
+  }
+
+  // Direction and entry price of a trade row; null if they can't be found.
+  function parseEntry(text) {
+    const dir = /\b(long|buy)\b/i.test(text) ? 1 : /\b(short|sell)\b/i.test(text) ? -1 : 0;
+    const ref = chartPrice();
+    if (!dir || !(ref > 0)) return null;
+    for (const raw of text.match(/\d[\d,]*\.\d+/g) || []) {
+      const v = toNum(raw);
+      if (Math.abs(v - ref) / ref <= 0.03) {
+        return { dir, entry: v, decimals: raw.split('.')[1].length };
+      }
+    }
+    return null;
+  }
+
+  function levelLines(text) {
+    const p = parseEntry(text);
+    const { slPct, rs } = getLevelSettings(false);
+    if (!p || !(slPct > 0)) return null;
+    const risk = p.entry * slPct / 100;
+    const f = v => v.toFixed(p.decimals);
+    const lines = [
+      `${p.dir === 1 ? '🟢 BUY ENTRY' : '🔴 SELL ENTRY'} · ${chartSymbol()}`,
+      '',
+      `Entry : ${f(p.entry)}`,
+      `SL    : ${f(p.entry - p.dir * risk)}`
+    ];
+    rs.forEach((r, i) => lines.push(`TP${i + 1}   : ${f(p.entry + p.dir * risk * r)}`));
+    return lines.join('\n');
+  }
+
   function describe(text, isNew) {
     const t = text.toLowerCase();
+    if (isNew) {
+      const levels = levelLines(text);
+      if (levels) return `${levels}\n\n${text}`;
+    }
     let emoji = '📈';
     if (/exit|close/.test(t) && !isNew) emoji = '🏁';
     else if (/long|buy/.test(t)) emoji = '🟢';

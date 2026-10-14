@@ -23,6 +23,22 @@ Yeh ek chhota browser script (agent) hai jo aapke **laptop ke Chrome me khule Tr
 3. **Trade #** column header par click karke list ko ulta (naya trade sabse upar) kar dijiye — lambi list me TradingView neeche wale trades load nahi karta.
 4. Chart wala tab **khula aur dikhta hua** rakhiye — alag window me rakh sakte hain. Tab minimize/background me hone par Chrome use dheema kar deta hai aur trade late pakda ja sakta hai.
 
+## Entry / SL / TP message
+
+Naye trade par message chart ke label jaisa aata hai:
+
+```
+🟢 BUY ENTRY · XAUUSD
+
+Entry : 4157.205
+SL    : 4148.891
+TP1   : 4161.362
+TP2   : 4165.519
+TP3   : 4169.677
+```
+
+Strategy ke labels (Entry/SL/TP box) chart ki tasveer me bante hain, script unhe padh nahi sakta — isliye SL/TP entry price se hisaab lagaye jaate hain: **SL = entry ± 0.2%, TP1/TP2/TP3 = 0.5R / 1R / 1.5R** (XAUUSD par "Confirmed candle + S&D + BT&SP" strategy ke labels se milaya). Strategy ki settings alag hon to Tampermonkey icon → **SL / TP settings badlo** se badliye (SL % = 0 karne par SL/TP nahi bheje jaate). Message me SL/TP ko ek baar chart ke label se mila lijiye.
+
 ## Dhyan dein
 
 - Laptop band / sleep ya Chrome band = koi notification nahi. Jab tak chart khula hai tabhi tak kaam karta hai.
